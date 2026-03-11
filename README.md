@@ -1,0 +1,119 @@
+# Rotection
+
+Scans SEA Military (and its affiliates, so everyone!) or its divisions, or ANY other group using [Rotector's](https://rotector.com) convenient [API](https://roscoe.rotector.com), resolves their Discord and Roblox accounts, and gives you a list of Discord IDs to massban!
+
+This comes with a web dashboard and a CLI. Web verison has live progress, charts, statistic, and export options.
+
+## What does this do?
+
+1. Takes a Roblox group ID
+2. Optionally discovers all allied/enemy groups
+3. Pulls tracked/flagged users from each group via Rotector
+4. Fills in missing usernames from the Roblox API wherever it can
+5. Fetches flag details (type, confidence, reasons)
+6. Resolves linked Discord accounts for each flagged user
+7. Saves everything to `scan_cache.json` and `flagged.txt`
+
+The web dashboard shows all of this in real time with an ETA, and lets you filter/sort/export the results after. It is highly recommended if you are not a developer to use the web dashboard.
+
+You can find the site hosting this [here](https://rotection.pythonanywhere.com). It is **locked** by password to avoid clankers (exception: ThatOneClankerr as he also happens to be a clanker but not *that* type). If you are SEA Staff, a DL, or someone that's interested, feel free to DM me for credentials (@infoflexy).
+## Self-hosting for the cool kids
+
+```bash
+# Clone the actual repository
+git clone https://github.com/informationtoyou/rotection.git
+cd Rotection
+
+# Make a virtual environment (venv)
+python3 -m venv .venv
+source .venv/bin/activate  # On windows: .venv\Scripts\activate
+
+# Install all dependencies (Python 3.14.3 is what this is written in, but usually this should work on Python 3.8+)
+pip install -r requirements.txt
+```
+
+Optionally, create a `.env` file in the project root:
+
+```
+API_KEY_HEADER=your_rotector_api_key_here
+```
+
+You get the API key from Rotector. Without it, the scanner can't fetch flag data. Rotector API keys are not available to the public at the moment without contacting the owner of Rotector. The owner of Rotector was kind enough to give me one, which is being used at https://rotection.pythonanywhere.com/.
+
+## Hey, I wanna help!
+
+Fork and make a PR. I will review it personally. Please detail your PR with the feature, or fix, or whatever and try to explain what you're doing. I'm not expecting an essay but something that makes my life easier and so I can quickly review the PR :D!
+
+## Hey, I have a suggestion / Hey, there's a bug!
+
+DM or make an Issue. Your contribution helps.
+
+## Running
+
+**Web dashboard:**
+
+```bash
+python app.py
+# open http://localhost:5050 in your web browser
+```
+
+**CLI:**
+
+```bash
+python bot.py                        # scan default group (2648601) with allies/enemies
+python bot.py --group=12345          # scan a different group
+python bot.py --no-allies            # skip allied groups
+python bot.py --no-enemies           # skip enemy groups   
+python bot.py --history              # list previous scans
+python bot.py --load=20260310_1234   # print a saved scan's results
+```
+## Project structure
+
+```
+app.py           : Flask server, API routes, SSE streaming
+scanner.py       : All the scanning logic, Rotector + Roblox API calls, threading
+bot.py           : CLI interface (no web server needed)
+templates/
+  index.html     : Single-page dashboard (vanilla JS + Chart.js)
+requirements.txt : Python dependencies
+.env             : API key (gitignored here)
+scan_cache.json  : Saved scan results (auto-generated)
+flagged.txt      : Space-separated Discord IDs from last scan (auto-generated)
+```
+
+## Features
+
+- **Threaded scanning**: Discord ID lookups run in parallel (20 threads by default) so scans finish way faster. 20 is the limit for those who do not have an API Key, if you do, 50 threads is the maximum as 500 requests / 10 seconds are allowed.
+- **Roblox API fallback**: if Rotector doesn't have a username or role, it pulls directly from Roblox when it can.
+- **Scan deduplication**: re-scanning the same group+allies combo updates the old scan instead of making duplicates
+- **W Error Handling!?**: it can handle erros if I messed up gg
+- **Progress Bar**: progress bar shows estimated time remaining per phase, as with any progress bar, this is never 100% accurate, it's just a metric to know something is actually happening
+- **Advanced filters**: filter by group, role, flag type, confidence range, actionable status, has-discord
+- **Pagination**: browse all users, not just the first 500
+- **Statistics tab**: charts for flag distribution, confidence spread, users per group, and much more coming soon!
+- **Discord ID export**: copy as space-separated, one-per-line, CSV, or download as JSON with full user details
+- **Scan history** : load any previous scan from the History tab
+- **Group navigation**: click group buttons to filter by specific affiliated groups
+
+## Rate limits
+
+- Rotector: 200 requests per 10 seconds (handled automatically)
+- Roblox: 80 requests per 10 seconds (conservative to avoid 429s)
+
+The scanner backs off and retries on 429 responses.
+By default, a maximum of 5 retries.
+Again, this is open-source for a reason.
+Go wild and change it in **scanner.py**.
+## License
+Do whatever the hell you want with this as long as you:
+- Credit @Infoflexy or @informationtoyou
+- **Don't** claim this work as your own. (unless you have contributed, then feel free to brag about how cool you are.)
+- Do not use it to evade bans from Rule 1, 11, 14, 19 in SEA.
+## help is this a virus
+no lmao plz scan on virustotal if this being open-source is not already enough for you
+## Final Notes
+ofc to anyone who criticises this, as Poppe once rightfully said:
+"anything but banning the p3dos" - Mr_Poppe2 March 2026
+Shoutout to all the people who supported along the way! You know who you are, thanks.
+Big shoutout to ggpv for indirectly giving me the idea to make this.
+Big shoutout to antonio_farah for reminding me that multithreading exists, I lowkey forgot it does (how am I even real).

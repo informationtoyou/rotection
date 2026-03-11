@@ -1,0 +1,119 @@
+"""
+Rotection web server — serves the dashboard and scan API.
+Run directly with `python app.py` for development, or use gunicorn for production.
+"""
+
+from flask import Flask, jsonify, request, render_template, Response
+from flask_cors import CORS
+import json
+import time
+from scanner import (
+    run_scan, scan_progress, is_scanning,
+    get_previous_scans, get_scan_by_id, FLAG_TYPES,
+)
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+app = Flask(__name__)
+CORS(app)
+
+
+# -- pages --
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+# -- api: start a scan --
+@app.route("/api/scan", methods=["POST"])
+def start_scan():
+    if is_scanning():
+        return jsonify({"error": "Someone else is already running a scan. Allow for that scan to finish"}), 409
+
+    data = request.get_json(force=True, silent=True) or {}
+    raw_group_id = data.get("group_id", "2648601")
+
+    # validate group id — must be a positive integer
+    try:
+        group_id = int(raw_group_id)
+        if group_id <= 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": f"Invalid group ID: '{raw_group_id}'. Must be a positive number."}), 400
+
+    include_allies = bool(data.get("include_allies", True))
+    include_enemies = bool(data.get("include_enemies", False))
+    run_scan(group_id, include_allies, include_enemies)
+    return jsonify({"ok": True, "message": "Scan started", "group_id": group_id})
+
+
+# -- api: poll scan progress --
+@app.route("/api/progress")
+def api_progress():
+    cursor = request.args.get("cursor", 0, type=int)
+    return jsonify(scan_progress.to_dict(log_cursor=cursor))
+
+
+# -- api: previous scans --
+@app.route("/api/scans")
+def list_scans():
+    return jsonify(get_previous_scans())
+
+
+# -- api: full scan result by id --
+@app.route("/api/scans/<scan_id>")
+def get_scan(scan_id):
+    scan = get_scan_by_id(scan_id)
+    if not scan:
+        return jsonify({"error": "Scan not found"}), 404
+    return jsonify(scan)
+
+
+# -- api: flag type reference --
+@app.route("/api/flag-types")
+def flag_types():
+    return jsonify(FLAG_TYPES)
+
+
+# -- api: export discord ids as json download --
+@app.route("/api/scans/<scan_id>/discord-export")
+def discord_export(scan_id):
+    scan = get_scan_by_id(scan_id)
+    if not scan:
+        return jsonify({"error": "Scan not found"}), 404
+
+    users = scan.get("users", {})
+    export = {
+        "scan_id": scan_id,
+        "primary_group": scan.get("primary_group_name", "Unknown"),
+        "timestamp": scan.get("timestamp"),
+        "discord_ids": scan.get("discord_ids", []),
+        "users_with_discord": [],
+    }
+    for uid, u in users.items():
+        accs = u.get("discord_accounts", [])
+        if accs:
+            export["users_with_discord"].append({
+                "roblox_id": u.get("id"),
+                "roblox_name": u.get("name", "Unknown"),
+                "flag_type": u.get("flagName", "Unknown"),
+                "confidence": u.get("confidence", 0),
+                "discord_accounts": accs,
+            })
+
+    return Response(
+        json.dumps(export, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename=rotection_discord_{scan_id}.json"},
+    )
+
+
+if __name__ == "__main__":
+    print("=" * 55)
+    print("  ROTECTION - WEB DASHBOARD RUNNING LOCALLY")
+    print("  Open http://localhost:5050 in your browser")
+    print("  An API Key is NOT required to use this, although you can use one.")
+    print("=" * 55)
+    app.run(debug=False, port=5050, threaded=True)

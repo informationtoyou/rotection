@@ -1,0 +1,2137 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Rotector API",
+    "description": "Official Rotector API for looking up flag status of Roblox users and groups, and Discord user connections.",
+    "version": "1.0.0"
+  },
+  "tags": [
+    {
+      "name": "Roblox Users",
+      "description": "Lookup flag status for Roblox users"
+    },
+    {
+      "name": "Roblox Groups",
+      "description": "Lookup flag status for Roblox groups"
+    },
+    {
+      "name": "Discord Users",
+      "description": "Lookup Discord user connections and server memberships"
+    },
+    {
+      "name": "Reference",
+      "description": "## Flag Types\n\n| Value | Name | Safe to action | Description |\n|-------|------|----------------|-------------|\n| 0 | Unflagged | No | No violations detected |\n| 1 | Flagged | Yes | System-detected violations with high accuracy |\n| 2 | Confirmed | Yes | Violations manually verified by a moderator |\n| 3 | Queued | No | Submitted for review, not an inappropriate user |\n| 5 | Mixed | At your discretion | Some inappropriate activity but insufficient evidence |\n| 6 | Past Offender | No | Previously flagged but has since cleared violations |\n\n> **Warning:** Do not treat all non-zero flag types as inappropriate. Types 0, 3, and 6 are not actionable. Only types 1 and 2 should be actioned automatically.\n\n## Verification Sources\n\nDiscord and Roblox connection lookups include a `sources` array indicating how the link was detected.\n\n| Value | Name |\n|-------|------|\n| 0 | Bloxlink |\n| 1 | RoVer |\n| 2 | Discord Profile |\n\nOlder records may have an empty `sources` array as source tracking was not present in earlier versions.\n\n## Authentication\n\nAPI keys provide elevated rate limits and queue quotas. Include your key in the `X-Auth-Token` header:\n\n```\nX-Auth-Token: your-api-key\n```\n\nBearer format is also accepted:\n\n```\nX-Auth-Token: Bearer your-api-key\n```\n\nAPI key holders get ~40% faster average response times on lookup endpoints. API keys are optional as all endpoints work without one, just at lower rate limits.\n\n## Rate Limiting\n\n| Tier | Limit | Window |\n|------|-------|--------|\n| Standard | 50 requests | 10 seconds |\n| API Key | 200 requests | 10 seconds |\n\nBatch endpoints count as multiple requests towards your rate limit (1 request per 25 IDs). All responses include rate limit headers:\n\n- `X-RateLimit-Limit` – Maximum requests allowed in window\n- `X-RateLimit-Remaining` – Requests remaining in current window\n- `X-RateLimit-Reset` – Unix timestamp when window resets\n- `Retry-After` – Seconds until window resets (429 responses only)"
+    }
+  ],
+  "paths": {
+    "/v1/lookup/roblox/user/{id}": {
+      "get": {
+        "tags": [
+          "Roblox Users"
+        ],
+        "summary": "Get user flag status",
+        "description": "Returns the safety flag status for a single Roblox user.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "description": "Roblox user ID",
+              "anyOf": [
+                {
+                  "format": "numeric",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 1,
+                  "description": "Roblox user ID",
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          {
+            "name": "excludeInfo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Set to 'true' to exclude detailed reasons",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "flagType"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minimum": 1,
+                          "description": "Roblox user ID",
+                          "anyOf": [
+                            {
+                              "format": "integer",
+                              "default": 0,
+                              "type": "string"
+                            },
+                            {
+                              "minimum": 1,
+                              "description": "Roblox user ID",
+                              "type": "integer"
+                            }
+                          ]
+                        },
+                        "flagType": {
+                          "type": "string",
+                          "enum": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            5,
+                            6
+                          ]
+                        },
+                        "confidence": {
+                          "description": "AI certainty score (0.0-1.0)",
+                          "type": "number"
+                        },
+                        "reasons": {
+                          "description": "Detailed violation analysis keyed by reason type",
+                          "type": "object",
+                          "patternProperties": {
+                            "^(.*)$": {
+                              "type": "object",
+                              "required": [
+                                "confidence"
+                              ],
+                              "properties": {
+                                "message": {
+                                  "description": "Detailed explanation of the violation",
+                                  "type": "string"
+                                },
+                                "confidence": {
+                                  "description": "Confidence score for this specific reason (0.0-1.0)",
+                                  "type": "number"
+                                },
+                                "evidence": {
+                                  "description": "Array of evidence strings, or null if not available",
+                                  "anyOf": [
+                                    {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "reviewer": {
+                          "description": "Moderator who verified the flag",
+                          "type": "object",
+                          "required": [
+                            "username",
+                            "displayName"
+                          ],
+                          "properties": {
+                            "username": {
+                              "description": "Reviewer username",
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "description": "Reviewer display name",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "engineVersion": {
+                          "description": "Analysis engine version used",
+                          "type": "string"
+                        },
+                        "versionCompatibility": {
+                          "type": "string",
+                          "enum": [
+                            "compatible",
+                            "outdated",
+                            "unknown",
+                            "current"
+                          ]
+                        },
+                        "isReportable": {
+                          "type": "boolean"
+                        },
+                        "isLocked": {
+                          "type": "boolean"
+                        },
+                        "queuedAt": {
+                          "description": "Unix timestamp when queued",
+                          "anyOf": [
+                            {
+                              "format": "integer",
+                              "default": 0,
+                              "type": "string"
+                            },
+                            {
+                              "description": "Unix timestamp when queued",
+                              "type": "integer"
+                            }
+                          ]
+                        },
+                        "processed": {
+                          "type": "boolean"
+                        },
+                        "processedAt": {
+                          "description": "Unix timestamp when processed",
+                          "anyOf": [
+                            {
+                              "format": "integer",
+                              "default": 0,
+                              "type": "string"
+                            },
+                            {
+                              "description": "Unix timestamp when processed",
+                              "type": "integer"
+                            }
+                          ]
+                        },
+                        "lastUpdated": {
+                          "description": "Unix timestamp of last analysis",
+                          "anyOf": [
+                            {
+                              "format": "integer",
+                              "default": 0,
+                              "type": "string"
+                            },
+                            {
+                              "description": "Unix timestamp of last analysis",
+                              "type": "integer"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1LookupRobloxUserById"
+      }
+    },
+    "/v1/lookup/roblox/user/{id}/plaintext": {
+      "get": {
+        "tags": [
+          "Roblox Users"
+        ],
+        "summary": "Get user flag status (flag status only)",
+        "description": "Returns the numeric flag type for a single Roblox user as plain text.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "description": "Roblox user ID",
+              "anyOf": [
+                {
+                  "format": "numeric",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 1,
+                  "description": "Roblox user ID",
+                  "type": "number"
+                }
+              ]
+            }
+          }
+        ],
+        "operationId": "getV1LookupRobloxUserByIdPlaintext"
+      }
+    },
+    "/v1/lookup/roblox/user": {
+      "post": {
+        "tags": [
+          "Roblox Users"
+        ],
+        "summary": "Batch user flag lookup",
+        "description": "Check multiple users in a single request. Maximum 100 users per batch. Response is keyed by user ID.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ids"
+                ],
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Array of Roblox IDs to lookup (max 100)",
+                    "type": "array",
+                    "items": {
+                      "minimum": 1,
+                      "anyOf": [
+                        {
+                          "format": "integer",
+                          "default": 0,
+                          "type": "string"
+                        },
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      ]
+                    }
+                  },
+                  "excludeInfo": {
+                    "description": "Exclude detailed reason messages and evidence",
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ids"
+                ],
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Array of Roblox IDs to lookup (max 100)",
+                    "type": "array",
+                    "items": {
+                      "minimum": 1,
+                      "anyOf": [
+                        {
+                          "format": "integer",
+                          "default": 0,
+                          "type": "string"
+                        },
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      ]
+                    }
+                  },
+                  "excludeInfo": {
+                    "description": "Exclude detailed reason messages and evidence",
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ids"
+                ],
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Array of Roblox IDs to lookup (max 100)",
+                    "type": "array",
+                    "items": {
+                      "minimum": 1,
+                      "anyOf": [
+                        {
+                          "format": "integer",
+                          "default": 0,
+                          "type": "string"
+                        },
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      ]
+                    }
+                  },
+                  "excludeInfo": {
+                    "description": "Exclude detailed reason messages and evidence",
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "description": "Map of user IDs to their flag status",
+                      "type": "object",
+                      "patternProperties": {
+                        "^(.*)$": {
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "flagType"
+                          ],
+                          "properties": {
+                            "id": {
+                              "minimum": 1,
+                              "description": "Roblox user ID",
+                              "anyOf": [
+                                {
+                                  "format": "integer",
+                                  "default": 0,
+                                  "type": "string"
+                                },
+                                {
+                                  "minimum": 1,
+                                  "description": "Roblox user ID",
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "flagType": {
+                              "description": "Safety classification: 0=safe, 1=pending, 2=confirmed, 3=queued, 5=mixed, 6=past_offender",
+                              "anyOf": [
+                                {
+                                  "const": 0,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": 1,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": 2,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": 3,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": 5,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": 6,
+                                  "type": "number"
+                                }
+                              ]
+                            },
+                            "confidence": {
+                              "description": "AI certainty score (0.0-1.0)",
+                              "type": "number"
+                            },
+                            "reasons": {
+                              "description": "Detailed violation analysis keyed by reason type",
+                              "type": "object",
+                              "patternProperties": {
+                                "^(.*)$": {
+                                  "type": "object",
+                                  "required": [
+                                    "confidence"
+                                  ],
+                                  "properties": {
+                                    "message": {
+                                      "description": "Detailed explanation of the violation",
+                                      "type": "string"
+                                    },
+                                    "confidence": {
+                                      "description": "Confidence score for this specific reason (0.0-1.0)",
+                                      "type": "number"
+                                    },
+                                    "evidence": {
+                                      "description": "Array of evidence strings, or null if not available",
+                                      "anyOf": [
+                                        {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "reviewer": {
+                              "description": "Moderator who verified the flag",
+                              "type": "object",
+                              "required": [
+                                "username",
+                                "displayName"
+                              ],
+                              "properties": {
+                                "username": {
+                                  "description": "Reviewer username",
+                                  "type": "string"
+                                },
+                                "displayName": {
+                                  "description": "Reviewer display name",
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "engineVersion": {
+                              "description": "Analysis engine version used",
+                              "type": "string"
+                            },
+                            "versionCompatibility": {
+                              "description": "Engine version status: current, compatible, outdated, or unknown",
+                              "anyOf": [
+                                {
+                                  "const": "compatible",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "outdated",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "unknown",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "current",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "isReportable": {
+                              "type": "boolean"
+                            },
+                            "isLocked": {
+                              "type": "boolean"
+                            },
+                            "queuedAt": {
+                              "description": "Unix timestamp when queued",
+                              "anyOf": [
+                                {
+                                  "format": "integer",
+                                  "default": 0,
+                                  "type": "string"
+                                },
+                                {
+                                  "description": "Unix timestamp when queued",
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "processed": {
+                              "type": "boolean"
+                            },
+                            "processedAt": {
+                              "description": "Unix timestamp when processed",
+                              "anyOf": [
+                                {
+                                  "format": "integer",
+                                  "default": 0,
+                                  "type": "string"
+                                },
+                                {
+                                  "description": "Unix timestamp when processed",
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "lastUpdated": {
+                              "description": "Unix timestamp of last analysis",
+                              "anyOf": [
+                                {
+                                  "format": "integer",
+                                  "default": 0,
+                                  "type": "string"
+                                },
+                                {
+                                  "description": "Unix timestamp of last analysis",
+                                  "type": "integer"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postV1LookupRobloxUser"
+      }
+    },
+    "/v1/lookup/roblox/group/{id}": {
+      "get": {
+        "tags": [
+          "Roblox Groups"
+        ],
+        "summary": "Get group flag status",
+        "description": "Returns the safety flag status for a single Roblox group.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "description": "Roblox group ID",
+              "anyOf": [
+                {
+                  "format": "numeric",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 1,
+                  "description": "Roblox group ID",
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          {
+            "name": "excludeInfo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Set to 'true' to exclude detailed reasons",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "flagType"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minimum": 1,
+                          "description": "Roblox group ID",
+                          "anyOf": [
+                            {
+                              "format": "integer",
+                              "default": 0,
+                              "type": "string"
+                            },
+                            {
+                              "minimum": 1,
+                              "description": "Roblox group ID",
+                              "type": "integer"
+                            }
+                          ]
+                        },
+                        "flagType": {
+                          "type": "string",
+                          "enum": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            5,
+                            6
+                          ]
+                        },
+                        "confidence": {
+                          "description": "AI certainty score (0.0-1.0)",
+                          "type": "number"
+                        },
+                        "reasons": {
+                          "description": "Detailed violation analysis keyed by reason type",
+                          "type": "object",
+                          "patternProperties": {
+                            "^(.*)$": {
+                              "type": "object",
+                              "required": [
+                                "confidence"
+                              ],
+                              "properties": {
+                                "message": {
+                                  "description": "Detailed explanation of the violation",
+                                  "type": "string"
+                                },
+                                "confidence": {
+                                  "description": "Confidence score for this specific reason (0.0-1.0)",
+                                  "type": "number"
+                                },
+                                "evidence": {
+                                  "description": "Array of evidence strings, or null if not available",
+                                  "anyOf": [
+                                    {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1LookupRobloxGroupById"
+      }
+    },
+    "/v1/lookup/roblox/group/{id}/plaintext": {
+      "get": {
+        "tags": [
+          "Roblox Groups"
+        ],
+        "summary": "Get group flag status (flag status only)",
+        "description": "Returns the numeric flag type for a single Roblox group as plain text.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "description": "Roblox group ID",
+              "anyOf": [
+                {
+                  "format": "numeric",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 1,
+                  "description": "Roblox group ID",
+                  "type": "number"
+                }
+              ]
+            }
+          }
+        ],
+        "operationId": "getV1LookupRobloxGroupByIdPlaintext"
+      }
+    },
+    "/v1/lookup/roblox/group": {
+      "post": {
+        "tags": [
+          "Roblox Groups"
+        ],
+        "summary": "Batch group flag lookup",
+        "description": "Check multiple groups in a single request. Maximum 100 groups per batch. Response is keyed by group ID.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ids"
+                ],
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Array of Roblox IDs to lookup (max 100)",
+                    "type": "array",
+                    "items": {
+                      "minimum": 1,
+                      "anyOf": [
+                        {
+                          "format": "integer",
+                          "default": 0,
+                          "type": "string"
+                        },
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      ]
+                    }
+                  },
+                  "excludeInfo": {
+                    "description": "Exclude detailed reason messages and evidence",
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ids"
+                ],
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Array of Roblox IDs to lookup (max 100)",
+                    "type": "array",
+                    "items": {
+                      "minimum": 1,
+                      "anyOf": [
+                        {
+                          "format": "integer",
+                          "default": 0,
+                          "type": "string"
+                        },
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      ]
+                    }
+                  },
+                  "excludeInfo": {
+                    "description": "Exclude detailed reason messages and evidence",
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ids"
+                ],
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Array of Roblox IDs to lookup (max 100)",
+                    "type": "array",
+                    "items": {
+                      "minimum": 1,
+                      "anyOf": [
+                        {
+                          "format": "integer",
+                          "default": 0,
+                          "type": "string"
+                        },
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      ]
+                    }
+                  },
+                  "excludeInfo": {
+                    "description": "Exclude detailed reason messages and evidence",
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "description": "Map of group IDs to their flag status",
+                      "type": "object",
+                      "patternProperties": {
+                        "^(.*)$": {
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "flagType"
+                          ],
+                          "properties": {
+                            "id": {
+                              "minimum": 1,
+                              "description": "Roblox group ID",
+                              "anyOf": [
+                                {
+                                  "format": "integer",
+                                  "default": 0,
+                                  "type": "string"
+                                },
+                                {
+                                  "minimum": 1,
+                                  "description": "Roblox group ID",
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "flagType": {
+                              "description": "Safety classification: 0=safe, 1=pending, 2=confirmed, 3=queued, 5=mixed, 6=past_offender",
+                              "anyOf": [
+                                {
+                                  "const": 0,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": 1,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": 2,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": 3,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": 5,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": 6,
+                                  "type": "number"
+                                }
+                              ]
+                            },
+                            "confidence": {
+                              "description": "AI certainty score (0.0-1.0)",
+                              "type": "number"
+                            },
+                            "reasons": {
+                              "description": "Detailed violation analysis keyed by reason type",
+                              "type": "object",
+                              "patternProperties": {
+                                "^(.*)$": {
+                                  "type": "object",
+                                  "required": [
+                                    "confidence"
+                                  ],
+                                  "properties": {
+                                    "message": {
+                                      "description": "Detailed explanation of the violation",
+                                      "type": "string"
+                                    },
+                                    "confidence": {
+                                      "description": "Confidence score for this specific reason (0.0-1.0)",
+                                      "type": "number"
+                                    },
+                                    "evidence": {
+                                      "description": "Array of evidence strings, or null if not available",
+                                      "anyOf": [
+                                        {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postV1LookupRobloxGroup"
+      }
+    },
+    "/v1/lookup/roblox/group/{id}/tracked-users": {
+      "get": {
+        "tags": [
+          "Roblox Groups"
+        ],
+        "summary": "Get tracked users in group",
+        "description": "Returns a paginated list of flagged users in a group. Uses cursor-based pagination.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "description": "Roblox group ID",
+              "anyOf": [
+                {
+                  "format": "numeric",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 1,
+                  "description": "Roblox group ID",
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Pagination cursor from previous response",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Number of results (1-100, default 20)",
+              "type": "string"
+            }
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Filter by membership status: 'true' for active, 'false' for inactive, omit for all",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "success",
+                        "data"
+                      ],
+                      "properties": {
+                        "success": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "users",
+                            "totalCount",
+                            "nextCursor",
+                            "hasMore"
+                          ],
+                          "properties": {
+                            "users": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "id",
+                                  "name",
+                                  "displayName",
+                                  "thumbnailUrl",
+                                  "isActive"
+                                ],
+                                "properties": {
+                                  "id": {
+                                    "description": "Roblox user ID",
+                                    "anyOf": [
+                                      {
+                                        "format": "integer",
+                                        "default": 0,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "description": "Roblox user ID",
+                                        "type": "integer"
+                                      }
+                                    ]
+                                  },
+                                  "name": {
+                                    "description": "Username",
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "description": "Display name",
+                                    "type": "string"
+                                  },
+                                  "thumbnailUrl": {
+                                    "nullable": true,
+                                    "anyOf": [
+                                      {
+                                        "description": "Profile avatar URL",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "isActive": {
+                                    "description": "Whether the user is an active group member",
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            },
+                            "totalCount": {
+                              "description": "Total number of tracked users in the group",
+                              "anyOf": [
+                                {
+                                  "format": "integer",
+                                  "default": 0,
+                                  "type": "string"
+                                },
+                                {
+                                  "description": "Total number of tracked users in the group",
+                                  "type": "integer"
+                                }
+                              ]
+                            },
+                            "nextCursor": {
+                              "nullable": true,
+                              "anyOf": [
+                                {
+                                  "description": "Cursor for the next page of results",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "hasMore": {
+                              "description": "Whether more results are available",
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "success",
+                        "error"
+                      ],
+                      "properties": {
+                        "success": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "error": {
+                          "description": "Error message",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1LookupRobloxGroupByIdTracked-users"
+      }
+    },
+    "/v1/lookup/discord/user/{id}": {
+      "get": {
+        "tags": [
+          "Discord Users"
+        ],
+        "summary": "Get Discord user data",
+        "description": "Returns tracked server memberships, linked Roblox accounts, and transitively connected alt accounts for a Discord user.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]+$",
+              "description": "Discord user ID",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "servers",
+                        "connections",
+                        "altAccounts"
+                      ],
+                      "properties": {
+                        "id": {
+                          "description": "Discord user ID",
+                          "type": "string"
+                        },
+                        "servers": {
+                          "description": "Tracked servers the user is a member of",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "serverId",
+                              "serverName",
+                              "joinedAt",
+                              "updatedAt",
+                              "firstSeenAt",
+                              "isTase",
+                              "inGracePeriod"
+                            ],
+                            "properties": {
+                              "serverId": {
+                                "description": "Discord server ID",
+                                "type": "string"
+                              },
+                              "serverName": {
+                                "description": "Discord server name",
+                                "type": "string"
+                              },
+                              "joinedAt": {
+                                "description": "Unix timestamp when user joined",
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "format": "integer",
+                                        "default": 0,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "integer"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "updatedAt": {
+                                "description": "Unix timestamp when membership was last updated",
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "format": "integer",
+                                        "default": 0,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "integer"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "firstSeenAt": {
+                                "description": "Unix timestamp when member was first observed",
+                                "anyOf": [
+                                  {
+                                    "format": "integer",
+                                    "default": 0,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Unix timestamp when member was first observed",
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              "isTase": {
+                                "description": "Whether this is a TASE (Trading and Selling Everything) server",
+                                "type": "boolean"
+                              },
+                              "inGracePeriod": {
+                                "description": "Whether this member is in a grace period",
+                                "type": "boolean"
+                              }
+                            }
+                          }
+                        },
+                        "connections": {
+                          "description": "Linked Roblox accounts",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "robloxUserId",
+                              "robloxUsername",
+                              "detectedAt",
+                              "updatedAt",
+                              "sources"
+                            ],
+                            "properties": {
+                              "robloxUserId": {
+                                "description": "Linked Roblox user ID",
+                                "anyOf": [
+                                  {
+                                    "format": "integer",
+                                    "default": 0,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Linked Roblox user ID",
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              "robloxUsername": {
+                                "description": "Linked Roblox username",
+                                "type": "string"
+                              },
+                              "detectedAt": {
+                                "description": "Unix timestamp when connection was detected",
+                                "anyOf": [
+                                  {
+                                    "format": "integer",
+                                    "default": 0,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Unix timestamp when connection was detected",
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              "updatedAt": {
+                                "description": "Unix timestamp when connection was last updated",
+                                "anyOf": [
+                                  {
+                                    "format": "integer",
+                                    "default": 0,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Unix timestamp when connection was last updated",
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              "sources": {
+                                "description": "Verification sources (0=Bloxlink, 1=Rover, 2=Profile)",
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "format": "integer",
+                                      "default": 0,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "integer"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "altAccounts": {
+                          "description": "Other Roblox accounts transitively linked through shared Discord accounts",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "robloxUserId",
+                              "robloxUsername",
+                              "detectedAt",
+                              "updatedAt",
+                              "sources"
+                            ],
+                            "properties": {
+                              "robloxUserId": {
+                                "description": "Linked Roblox user ID",
+                                "anyOf": [
+                                  {
+                                    "format": "integer",
+                                    "default": 0,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Linked Roblox user ID",
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              "robloxUsername": {
+                                "description": "Linked Roblox username",
+                                "type": "string"
+                              },
+                              "detectedAt": {
+                                "description": "Unix timestamp when connection was detected",
+                                "anyOf": [
+                                  {
+                                    "format": "integer",
+                                    "default": 0,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Unix timestamp when connection was detected",
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              "updatedAt": {
+                                "description": "Unix timestamp when connection was last updated",
+                                "anyOf": [
+                                  {
+                                    "format": "integer",
+                                    "default": 0,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Unix timestamp when connection was last updated",
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              "sources": {
+                                "description": "Verification sources (0=Bloxlink, 1=Rover, 2=Profile)",
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "format": "integer",
+                                      "default": 0,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "integer"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1LookupDiscordUserById"
+      }
+    },
+    "/v1/lookup/discord/user": {
+      "post": {
+        "tags": [
+          "Discord Users"
+        ],
+        "summary": "Batch Discord user lookup",
+        "description": "Check multiple Discord users in a single request. Maximum 100 users per batch. Response is keyed by Discord user ID.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ids"
+                ],
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Array of Discord user IDs to lookup (max 100)",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ids"
+                ],
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Array of Discord user IDs to lookup (max 100)",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ids"
+                ],
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Array of Discord user IDs to lookup (max 100)",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "description": "Map of Discord user IDs to their data",
+                      "type": "object",
+                      "patternProperties": {
+                        "^(.*)$": {
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "servers",
+                            "connections"
+                          ],
+                          "properties": {
+                            "id": {
+                              "description": "Discord user ID",
+                              "type": "string"
+                            },
+                            "servers": {
+                              "description": "Tracked servers the user is a member of",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "serverId",
+                                  "serverName",
+                                  "joinedAt",
+                                  "updatedAt",
+                                  "firstSeenAt",
+                                  "isTase",
+                                  "inGracePeriod"
+                                ],
+                                "properties": {
+                                  "serverId": {
+                                    "description": "Discord server ID",
+                                    "type": "string"
+                                  },
+                                  "serverName": {
+                                    "description": "Discord server name",
+                                    "type": "string"
+                                  },
+                                  "joinedAt": {
+                                    "description": "Unix timestamp when user joined",
+                                    "anyOf": [
+                                      {
+                                        "anyOf": [
+                                          {
+                                            "format": "integer",
+                                            "default": 0,
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "integer"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "updatedAt": {
+                                    "description": "Unix timestamp when membership was last updated",
+                                    "anyOf": [
+                                      {
+                                        "anyOf": [
+                                          {
+                                            "format": "integer",
+                                            "default": 0,
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "integer"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "firstSeenAt": {
+                                    "description": "Unix timestamp when member was first observed",
+                                    "anyOf": [
+                                      {
+                                        "format": "integer",
+                                        "default": 0,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "description": "Unix timestamp when member was first observed",
+                                        "type": "integer"
+                                      }
+                                    ]
+                                  },
+                                  "isTase": {
+                                    "description": "Whether this is a TASE (Trading and Selling Everything) server",
+                                    "type": "boolean"
+                                  },
+                                  "inGracePeriod": {
+                                    "description": "Whether this member is in a grace period",
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            },
+                            "connections": {
+                              "description": "Linked Roblox accounts",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "robloxUserId",
+                                  "robloxUsername",
+                                  "detectedAt",
+                                  "updatedAt",
+                                  "sources"
+                                ],
+                                "properties": {
+                                  "robloxUserId": {
+                                    "description": "Linked Roblox user ID",
+                                    "anyOf": [
+                                      {
+                                        "format": "integer",
+                                        "default": 0,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "description": "Linked Roblox user ID",
+                                        "type": "integer"
+                                      }
+                                    ]
+                                  },
+                                  "robloxUsername": {
+                                    "description": "Linked Roblox username",
+                                    "type": "string"
+                                  },
+                                  "detectedAt": {
+                                    "description": "Unix timestamp when connection was detected",
+                                    "anyOf": [
+                                      {
+                                        "format": "integer",
+                                        "default": 0,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "description": "Unix timestamp when connection was detected",
+                                        "type": "integer"
+                                      }
+                                    ]
+                                  },
+                                  "updatedAt": {
+                                    "description": "Unix timestamp when connection was last updated",
+                                    "anyOf": [
+                                      {
+                                        "format": "integer",
+                                        "default": 0,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "description": "Unix timestamp when connection was last updated",
+                                        "type": "integer"
+                                      }
+                                    ]
+                                  },
+                                  "sources": {
+                                    "description": "Verification sources (0=Bloxlink, 1=Rover, 2=Profile)",
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "format": "integer",
+                                          "default": 0,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "integer"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postV1LookupDiscordUser"
+      }
+    },
+    "/v1/lookup/roblox/user/{id}/discord": {
+      "get": {
+        "tags": [
+          "Roblox Users"
+        ],
+        "summary": "Get Discord accounts for Roblox user",
+        "description": "Returns linked Discord accounts and their tracked server memberships for a Roblox user. Only returns results for users that exist in our database.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]+$",
+              "description": "Roblox user ID",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "robloxUserId",
+                        "discordAccounts",
+                        "altAccounts"
+                      ],
+                      "properties": {
+                        "robloxUserId": {
+                          "description": "Roblox user ID",
+                          "anyOf": [
+                            {
+                              "format": "integer",
+                              "default": 0,
+                              "type": "string"
+                            },
+                            {
+                              "description": "Roblox user ID",
+                              "type": "integer"
+                            }
+                          ]
+                        },
+                        "discordAccounts": {
+                          "description": "Linked Discord accounts",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "detectedAt",
+                              "updatedAt",
+                              "servers",
+                              "sources"
+                            ],
+                            "properties": {
+                              "id": {
+                                "description": "Discord user ID",
+                                "type": "string"
+                              },
+                              "detectedAt": {
+                                "description": "Unix timestamp when connection was detected",
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "format": "integer",
+                                        "default": 0,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "integer"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "updatedAt": {
+                                "description": "Unix timestamp when connection was last updated",
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "format": "integer",
+                                        "default": 0,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "integer"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "servers": {
+                                "description": "Tracked servers this Discord account is a member of",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "required": [
+                                    "serverId",
+                                    "serverName",
+                                    "joinedAt",
+                                    "updatedAt",
+                                    "firstSeenAt",
+                                    "isTase",
+                                    "inGracePeriod"
+                                  ],
+                                  "properties": {
+                                    "serverId": {
+                                      "description": "Discord server ID",
+                                      "type": "string"
+                                    },
+                                    "serverName": {
+                                      "description": "Discord server name",
+                                      "type": "string"
+                                    },
+                                    "joinedAt": {
+                                      "description": "Unix timestamp when user joined",
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "format": "integer",
+                                              "default": 0,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "integer"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "updatedAt": {
+                                      "description": "Unix timestamp when membership was last updated",
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "format": "integer",
+                                              "default": 0,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "integer"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "firstSeenAt": {
+                                      "description": "Unix timestamp when member was first observed",
+                                      "anyOf": [
+                                        {
+                                          "format": "integer",
+                                          "default": 0,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "description": "Unix timestamp when member was first observed",
+                                          "type": "integer"
+                                        }
+                                      ]
+                                    },
+                                    "isTase": {
+                                      "description": "Whether this is a TASE (Trading and Selling Everything) server",
+                                      "type": "boolean"
+                                    },
+                                    "inGracePeriod": {
+                                      "description": "Whether this member is in a grace period",
+                                      "type": "boolean"
+                                    }
+                                  }
+                                }
+                              },
+                              "sources": {
+                                "description": "Verification sources (0=Bloxlink, 1=Rover, 2=Profile)",
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "format": "integer",
+                                      "default": 0,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "integer"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "altAccounts": {
+                          "description": "Other Roblox accounts linked to the same Discord accounts as this user",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "robloxUserId",
+                              "robloxUsername",
+                              "detectedAt",
+                              "updatedAt",
+                              "sources"
+                            ],
+                            "properties": {
+                              "robloxUserId": {
+                                "description": "Linked Roblox user ID",
+                                "anyOf": [
+                                  {
+                                    "format": "integer",
+                                    "default": 0,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Linked Roblox user ID",
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              "robloxUsername": {
+                                "description": "Linked Roblox username",
+                                "type": "string"
+                              },
+                              "detectedAt": {
+                                "description": "Unix timestamp when connection was detected",
+                                "anyOf": [
+                                  {
+                                    "format": "integer",
+                                    "default": 0,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Unix timestamp when connection was detected",
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              "updatedAt": {
+                                "description": "Unix timestamp when connection was last updated",
+                                "anyOf": [
+                                  {
+                                    "format": "integer",
+                                    "default": 0,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Unix timestamp when connection was last updated",
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              "sources": {
+                                "description": "Verification sources (0=Bloxlink, 1=Rover, 2=Profile)",
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "format": "integer",
+                                      "default": 0,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "integer"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1LookupRobloxUserByIdDiscord"
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
