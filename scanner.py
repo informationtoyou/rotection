@@ -774,7 +774,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                 dup_idx = i
                 break
         if dup_idx is not None:
-            p.log(f"  Replacing previous scan for this group (was: {cache['scans'][dup_idx].get('id')})")
+            p.log(f"  Replacing previous scan for this group (was: {cache['scans'][dup_idx].get('id')})") # ignore this comment
             cache["scans"][dup_idx] = scan_result
         else:
             cache["scans"].append(scan_result)
