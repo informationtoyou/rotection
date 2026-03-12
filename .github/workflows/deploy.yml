@@ -5,9 +5,6 @@ on:
     branches:
       - main
 
-env:
-  PA_API_BASE: https://www.pythonanywhere.com/api/v0/user
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -19,69 +16,61 @@ jobs:
 
     - name: Notify site and wait for scan
       run: |
-        SITE_URL="https://${{ secrets.PA_USERNAME }}.pythonanywhere.com"
+        SITE="https://${{ secrets.PA_USERNAME }}.pythonanywhere.com"
+        KEY="rotection-deploy-key"
 
-        # --- step 1: check if the deploy endpoints exist on the live site ---
-        echo "Checking if deploy endpoints are available..."
-        STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SITE_URL}/api/deploy/status")
-        echo "Deploy status endpoint returned: HTTP ${STATUS_CODE}"
+        echo "=== Step 1: Check if deploy endpoints exist ==="
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SITE/api/deploy/status")
+        echo "GET /api/deploy/status -> HTTP $STATUS"
 
-        if [ "$STATUS_CODE" != "200" ]; then
-          echo "Deploy endpoints not available yet (HTTP ${STATUS_CODE})."
-          echo "This is expected on first deploy — skipping notify & scan wait."
-        else
-          # --- step 2: notify the site that an update is incoming ---
-          echo "Notifying site of incoming deploy..."
-          NOTIFY_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            "${SITE_URL}/api/deploy/notify" \
-            -H "X-Deploy-Secret: ${{ secrets.DEPLOY_SECRET }}" \
-            -H "Content-Type: application/json" \
-            -d '{"message": "A new update is being deployed. The site will refresh shortly."}')
-          echo "Notify response: HTTP ${NOTIFY_CODE}"
-
-          if [ "$NOTIFY_CODE" != "200" ]; then
-            echo "Warning: Notify failed (HTTP ${NOTIFY_CODE}). Possible auth issue — check DEPLOY_SECRET."
-          else
-            echo "Site notified successfully. Banner should be visible."
-          fi
-
-          # --- step 3: wait for any running scan to finish ---
-          echo "Checking if a scan is running..."
-          while true; do
-            RESP=$(curl -s "${SITE_URL}/api/deploy/status" 2>/dev/null)
-            if [ -z "$RESP" ]; then
-              echo "Could not reach site. Proceeding."
-              break
-            fi
-
-            SCANNING=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('scanning', False))" 2>/dev/null)
-            if [ "$SCANNING" != "True" ]; then
-              echo "No scan running. Proceeding with deploy."
-              break
-            fi
-
-            echo "Scan in progress. Waiting 15s..."
-            sleep 15
-          done
+        if [ "$STATUS" != "200" ]; then
+          echo "Endpoints not live yet (first deploy). Skipping notify+wait."
+          exit 0
         fi
 
-    - name: Run git pull on existing console
+        echo "=== Step 2: Notify site ==="
+        NOTIFY=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SITE/api/deploy/notify" \
+          -H "X-Deploy-Secret: $KEY" \
+          -H "Content-Type: application/json" \
+          -d '{"message":"A new update is being deployed. The site will refresh shortly."}')
+        echo "POST /api/deploy/notify -> HTTP $NOTIFY"
+
+        if [ "$NOTIFY" != "200" ]; then
+          echo "Notify failed. Skipping wait."
+          exit 0
+        fi
+
+        echo "Banner is now visible to users."
+
+        echo "=== Step 3: Wait for scan to finish ==="
+        while true; do
+          RESP=$(curl -s "$SITE/api/deploy/status" 2>/dev/null || echo "")
+          if [ -z "$RESP" ]; then
+            echo "Site unreachable. Proceeding."
+            break
+          fi
+          IS_SCANNING=$(echo "$RESP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('scanning',False))" 2>/dev/null || echo "False")
+          if [ "$IS_SCANNING" != "True" ]; then
+            echo "No scan running. Proceeding."
+            break
+          fi
+          echo "Scan running. Waiting 15s..."
+          sleep 15
+        done
+
+    - name: Pull latest code
       run: |
-        echo "Sending git pull command..."
         curl -s -X POST \
-          "${{ env.PA_API_BASE }}/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
+          "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
           -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
           -H "Content-Type: application/json" \
-          -d '{"input": "git pull origin main\n"}'
-
-        echo "Waiting for git pull to complete..."
+          -d '{"input":"git pull origin main\n"}'
+        echo "Sent git pull. Waiting 10s..."
         sleep 10
-        echo "Done waiting."
 
-    - name: Reload PythonAnywhere Web App
+    - name: Reload web app
       run: |
-        echo "Reloading web app..."
-        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-          "${{ env.PA_API_BASE }}/${{ secrets.PA_USERNAME }}/webapps/${{ secrets.PA_USERNAME }}.pythonanywhere.com/reload/" \
-          -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}")
-        echo "Reload response: HTTP $HTTP_CODE"
+        curl -s -X POST \
+          "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/${{ secrets.PA_USERNAME }}.pythonanywhere.com/reload/" \
+          -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}"
+        echo "Reload requested."
