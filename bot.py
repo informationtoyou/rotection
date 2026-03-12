@@ -53,7 +53,7 @@ def main():
             print(f"  IDs: {' '.join(scan.get('discord_ids', []))}")
             return
 
-    # --group=XXXX: override the default group
+    # override grp id
     group_id = GROUP_ID
     for arg in sys.argv:
         if arg.startswith("--group="):
