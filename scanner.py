@@ -27,7 +27,7 @@ ROBLOX_THUMBNAILS_API = "https://thumbnails.roblox.com"
 CACHE_FILE = "scan_cache.json"
 FLAGGED_FILE = "flagged.txt"
 
-# rotector allows 50 req / 10s - but i have an api key so this is increased!
+# rotector allows 50 req / 10s - but i have an api key so this is increased!!
 RATE_LIMIT = 500
 RATE_WINDOW = 10
 
