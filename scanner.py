@@ -135,7 +135,29 @@ def _roblox_get(url: str, params: dict | None = None) -> dict | None:
         try:
             resp = _roblox_session.get(url, params=params, timeout=20)
             if resp.status_code == 429:
-                time.sleep(5)
+                retry = int(resp.headers.get("Retry-After", 5))
+                time.sleep(retry)
+                continue
+            if resp.status_code == 200:
+                return resp.json()
+            return None
+        except requests.RequestException:
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(1)
+                continue
+            return None
+    return None
+
+
+def _roblox_post(url: str, json_body: dict) -> dict | None:
+    """POST helper for Roblox APIs with rate limiting, 429 handling, and retries."""
+    for attempt in range(MAX_RETRIES):
+        roblox_limiter.wait()
+        try:
+            resp = _roblox_session.post(url, json=json_body, timeout=20)
+            if resp.status_code == 429:
+                retry = int(resp.headers.get("Retry-After", 5))
+                time.sleep(retry)
                 continue
             if resp.status_code == 200:
                 return resp.json()
@@ -162,22 +184,29 @@ def get_user_info_from_roblox(user_id: int) -> dict | None:
 def batch_get_user_info_from_roblox(user_ids: list[int]) -> dict:
     results = {}
     chunks = [user_ids[i:i + 100] for i in range(0, len(user_ids), 100)]
-    for chunk in chunks:
-        roblox_limiter.wait()
-        try:
-            resp = _roblox_session.post(
-                f"{ROBLOX_USERS_API}/v1/users",
-                json={"userIds": chunk, "excludeBannedUsers": False},
-                timeout=20,
-            )
-            if resp.status_code == 200:
-                for u in resp.json().get("data", []):
+    results_lock = threading.Lock()
+
+    def _fetch_chunk(chunk):
+        data = _roblox_post(
+            f"{ROBLOX_USERS_API}/v1/users",
+            {"userIds": chunk, "excludeBannedUsers": False},
+        )
+        if data:
+            with results_lock:
+                for u in data.get("data", []):
                     results[str(u["id"])] = {
                         "name": u.get("name", "Unknown"),
                         "displayName": u.get("displayName", ""),
                     }
-        except requests.RequestException:
-            pass
+
+    with ThreadPoolExecutor(max_workers=min(WORKER_THREADS, len(chunks) or 1)) as executor:
+        futures = [executor.submit(_fetch_chunk, chunk) for chunk in chunks]
+        for f in as_completed(futures):
+            try:
+                f.result()
+            except Exception:
+                pass
+
     return results
 
 
@@ -493,7 +522,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
 
     try:
         # ---- phase 1: group discovery ----
-        p.set_phase("Discovering groups", "Looking up the primary group and finding allies on Roblox")
+        p.set_phase("Discovering groups", "Looking up the primary group and finding allies/enemies on Roblox")
         p.log(f"Target group: {primary_group_id}")
 
         primary_info = get_group_info(primary_group_id)
@@ -501,12 +530,33 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         p.log(f"  Name: {primary_name}")
 
         groups_to_scan = [{"id": primary_group_id, "name": primary_name, "is_primary": True}]
-
         seen_ids = {primary_group_id}
 
+        # fetch allies and enemies in parallel if both are requested
+        allies = []
+        enemies = []
+        fetch_tasks = {}
+        if include_allies or include_enemies:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                if include_allies:
+                    p.log("Fetching allied groups...")
+                    fetch_tasks["allies"] = executor.submit(get_allied_groups, primary_group_id)
+                if include_enemies:
+                    p.log("Fetching enemy groups...")
+                    fetch_tasks["enemies"] = executor.submit(get_enemy_groups, primary_group_id)
+
+                if "allies" in fetch_tasks:
+                    try:
+                        allies = fetch_tasks["allies"].result()
+                    except Exception:
+                        allies = []
+                if "enemies" in fetch_tasks:
+                    try:
+                        enemies = fetch_tasks["enemies"].result()
+                    except Exception:
+                        enemies = []
+
         if include_allies:
-            p.log("Fetching allied groups...")
-            allies = get_allied_groups(primary_group_id)
             p.log(f"  Found {len(allies)} allies")
             for a in allies:
                 if a["id"] not in seen_ids:
@@ -515,8 +565,6 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                     p.log(f"    + {a['name']} ({a['memberCount']} members)")
 
         if include_enemies:
-            p.log("Fetching enemy groups...")
-            enemies = get_enemy_groups(primary_group_id)
             p.log(f"  Found {len(enemies)} enemies")
             for e in enemies:
                 if e["id"] not in seen_ids:
@@ -528,29 +576,26 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         p.progress = 5.0
         p.update_eta()
 
-        # ---- phase 2: pull tracked users from each group ----
-        p.set_phase("Scanning groups", "Pulling tracked users from Rotector for each group")
+        # ---- phase 2: pull tracked users from each group (threaded) ----
+        p.set_phase("Scanning groups", "Pulling tracked users from Rotector for each group (parallel)")
         all_user_records = {}
         group_results = {}
+        group_scan_lock = threading.Lock()
+        groups_done_counter = [0]
 
-        for gi, group in enumerate(groups_to_scan):
-            if p.cancelled:
-                p.log("Scan cancelled")
-                p.status = "cancelled"
-                return
-
+        def _scan_group(gi, group):
             gid = group["id"]
             gname = group["name"]
-            p.current_group = gname
             p.log(f"[{gi + 1}/{len(groups_to_scan)}] Scanning {gname} (ID: {gid})")
 
             tracked = get_tracked_users_for_group(gid, log=p.log)
-            p.log(f"  Tracked users in group: {len(tracked)}")
+            p.log(f"  Tracked users in {gname}: {len(tracked)}")
 
+            local_records = {}
             for u in tracked:
                 uid = u["id"]
                 uid_str = str(uid)
-                record = {
+                local_records[uid_str] = {
                     "id": uid,
                     "name": u.get("name") or "",
                     "displayName": u.get("displayName") or "",
@@ -559,25 +604,47 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                     "group_id": gid,
                     "group_name": gname,
                 }
-                if uid_str not in all_user_records:
-                    all_user_records[uid_str] = record
-                else:
-                    existing = all_user_records[uid_str]
-                    if "all_groups" not in existing:
-                        existing["all_groups"] = [{"id": existing["group_id"], "name": existing["group_name"]}]
-                    existing["all_groups"].append({"id": gid, "name": gname})
 
-            group_results[str(gid)] = {
+            local_group_result = {
                 "name": gname,
                 "is_primary": group["is_primary"],
                 "tracked_count": len(tracked),
                 "users": [str(u["id"]) for u in tracked],
             }
 
-            p.groups_done = gi + 1
-            p.progress = 5 + (gi + 1) / len(groups_to_scan) * 25
+            with group_scan_lock:
+                for uid_str, record in local_records.items():
+                    if uid_str not in all_user_records:
+                        all_user_records[uid_str] = record
+                    else:
+                        existing = all_user_records[uid_str]
+                        if "all_groups" not in existing:
+                            existing["all_groups"] = [{"id": existing["group_id"], "name": existing["group_name"]}]
+                        existing["all_groups"].append({"id": gid, "name": gname})
+
+                group_results[str(gid)] = local_group_result
+                groups_done_counter[0] += 1
+                done = groups_done_counter[0]
+
+            p.current_group = gname
+            p.groups_done = done
+            p.progress = 5 + done / len(groups_to_scan) * 25
             p.flagged_found = len(all_user_records)
             p.update_eta()
+
+        # use fewer workers for group scanning to avoid overwhelming the rotector API
+        group_workers = min(WORKER_THREADS, len(groups_to_scan))
+        with ThreadPoolExecutor(max_workers=group_workers) as executor:
+            futures = [executor.submit(_scan_group, gi, group) for gi, group in enumerate(groups_to_scan)]
+            for f in as_completed(futures):
+                if p.cancelled:
+                    p.log("Scan cancelled")
+                    p.status = "cancelled"
+                    return
+                try:
+                    f.result()
+                except Exception as exc:
+                    p.log(f"  Warning: group scan error: {exc}")
 
         p.users_total = len(all_user_records)
         p.log(f"Total unique tracked users: {len(all_user_records)}")
