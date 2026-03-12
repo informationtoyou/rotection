@@ -55,15 +55,13 @@ jobs:
 
     - name: Run git pull on existing console
       run: |
-        # send cd + git pull to the existing console
         echo "Sending git pull command..."
         curl -s -X POST \
           "${{ env.PA_API_BASE }}/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
           -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
           -H "Content-Type: application/json" \
-          -d '{"input": "cd /home/${{ secrets.PA_USERNAME }}/Rotection && git pull origin main\n"}'
+          -d '{"input": "git pull origin main\n"}'
 
-        # give git pull time to complete — no reliable way to check output
         echo "Waiting for git pull to complete..."
         sleep 10
         echo "Done waiting."
