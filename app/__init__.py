@@ -21,3 +21,6 @@ def create_app() -> Flask:
     register_routes(app)
 
     return app
+
+
+app = create_app()
