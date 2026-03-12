@@ -21,7 +21,7 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-DEPLOY_SECRET = os.getenv("DEPLOY_SECRET", "")
+DEPLOY_SECRET = os.getenv("DEPLOY_SECRET", "rotection-deploy-key")
 
 # --- deploy state (thread-safe) ---
 _deploy_lock = threading.Lock()
@@ -162,10 +162,11 @@ def discord_export(scan_id):
 # -- api: deploy notification (called by GitHub Actions before reload) --
 @app.route("/api/deploy/notify", methods=["POST"])
 def deploy_notify():
-    # authenticate with a shared secret
-    auth = request.headers.get("X-Deploy-Secret", "")
-    if not DEPLOY_SECRET or auth != DEPLOY_SECRET:
-        return jsonify({"error": "Unauthorized"}), 403
+    # authenticate with a shared secret (if one is configured)
+    if DEPLOY_SECRET:
+        auth = request.headers.get("X-Deploy-Secret", "")
+        if auth != DEPLOY_SECRET:
+            return jsonify({"error": "Unauthorized"}), 403
 
     data = request.get_json(force=True, silent=True) or {}
     message = data.get("message", "")
