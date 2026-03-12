@@ -17,40 +17,52 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Notify site that an update is incoming
-      continue-on-error: true
+    - name: Notify site and wait for scan
       run: |
-        # this will 404 on the very first deploy (endpoint doesn't exist yet) — that's fine
-        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-          "https://${{ secrets.PA_USERNAME }}.pythonanywhere.com/api/deploy/notify" \
-          -H "X-Deploy-Secret: ${{ secrets.DEPLOY_SECRET }}" \
-          -H "Content-Type: application/json" \
-          -d '{"message": "A new update is being deployed. The site will refresh shortly."}')
-        echo "Notify response: HTTP $HTTP_CODE"
-        if [ "$HTTP_CODE" = "200" ]; then
-          echo "Site notified successfully."
-        else
-          echo "Could not notify site (HTTP $HTTP_CODE). This is expected on first deploy."
-        fi
+        SITE_URL="https://${{ secrets.PA_USERNAME }}.pythonanywhere.com"
 
-    - name: Wait for any running scan to finish
-      run: |
-        echo "Checking if a scan is running..."
-        MAX_WAIT=18000
-        WAITED=0
-        while [ $WAITED -lt $MAX_WAIT ]; do
-          RESP=$(curl -s "https://${{ secrets.PA_USERNAME }}.pythonanywhere.com/api/deploy/status" 2>/dev/null || echo '{"scanning":false}')
-          SCANNING=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('scanning', False))" 2>/dev/null || echo "False")
-          if [ "$SCANNING" != "True" ]; then
-            echo "No scan running. Proceeding with deploy."
-            break
+        # --- step 1: check if the deploy endpoints exist on the live site ---
+        echo "Checking if deploy endpoints are available..."
+        STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SITE_URL}/api/deploy/status")
+        echo "Deploy status endpoint returned: HTTP ${STATUS_CODE}"
+
+        if [ "$STATUS_CODE" != "200" ]; then
+          echo "Deploy endpoints not available yet (HTTP ${STATUS_CODE})."
+          echo "This is expected on first deploy — skipping notify & scan wait."
+        else
+          # --- step 2: notify the site that an update is incoming ---
+          echo "Notifying site of incoming deploy..."
+          NOTIFY_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "${SITE_URL}/api/deploy/notify" \
+            -H "X-Deploy-Secret: ${{ secrets.DEPLOY_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"message": "A new update is being deployed. The site will refresh shortly."}')
+          echo "Notify response: HTTP ${NOTIFY_CODE}"
+
+          if [ "$NOTIFY_CODE" != "200" ]; then
+            echo "Warning: Notify failed (HTTP ${NOTIFY_CODE}). Possible auth issue — check DEPLOY_SECRET."
+          else
+            echo "Site notified successfully. Banner should be visible."
           fi
-          echo "Scan in progress, waiting... (${WAITED}s)"
-          sleep 15
-          WAITED=$((WAITED + 15))
-        done
-        if [ $WAITED -ge $MAX_WAIT ]; then
-          echo "Scan still running after 5 hours. Deploying anyway."
+
+          # --- step 3: wait for any running scan to finish ---
+          echo "Checking if a scan is running..."
+          while true; do
+            RESP=$(curl -s "${SITE_URL}/api/deploy/status" 2>/dev/null)
+            if [ -z "$RESP" ]; then
+              echo "Could not reach site. Proceeding."
+              break
+            fi
+
+            SCANNING=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('scanning', False))" 2>/dev/null)
+            if [ "$SCANNING" != "True" ]; then
+              echo "No scan running. Proceeding with deploy."
+              break
+            fi
+
+            echo "Scan in progress. Waiting 15s..."
+            sleep 15
+          done
         fi
 
     - name: Run git pull on existing console
@@ -73,8 +85,3 @@ jobs:
           "${{ env.PA_API_BASE }}/${{ secrets.PA_USERNAME }}/webapps/${{ secrets.PA_USERNAME }}.pythonanywhere.com/reload/" \
           -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}")
         echo "Reload response: HTTP $HTTP_CODE"
-        if [ "$HTTP_CODE" = "200" ]; then
-          echo "Web app reloaded successfully."
-        else
-          echo "Warning: Reload returned HTTP $HTTP_CODE (this may still be OK)."
-        fi
