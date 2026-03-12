@@ -32,7 +32,7 @@ RATE_LIMIT = 500
 RATE_WINDOW = 10
 
 # how many threads to use for parallel API work
-WORKER_THREADS = 20
+WORKER_THREADS = 50
 
 MAX_RETRIES = 5
 
@@ -368,6 +368,7 @@ def get_discord_ids_for_user(roblox_id: int) -> dict:
 class ScanProgress:
     def __init__(self):
         self.lock = threading.Lock()
+        self._cancel = threading.Event()
         self.status = "idle"
         self.phase = ""
         self.phase_description = ""
@@ -387,6 +388,7 @@ class ScanProgress:
     def reset(self):
         """Safely reset all fields without replacing the lock."""
         with self.lock:
+            self._cancel.clear()
             self.status = "idle"
             self.phase = ""
             self.phase_description = ""
@@ -402,6 +404,13 @@ class ScanProgress:
             self.scan_id = None
             self.eta_seconds = None
             self.start_time = None
+
+    def cancel(self):
+        self._cancel.set()
+
+    @property
+    def cancelled(self):
+        return self._cancel.is_set()
 
     def log(self, msg: str):
         with self.lock:
@@ -453,6 +462,7 @@ class ScanProgress:
 # global state
 scan_progress = ScanProgress()
 _scan_thread: threading.Thread | None = None
+_scan_lock = threading.Lock()
 
 
 def is_scanning() -> bool:
@@ -461,12 +471,16 @@ def is_scanning() -> bool:
 
 def run_scan(primary_group_id: int, include_allies: bool = True, include_enemies: bool = False):
     global _scan_thread
-    if is_scanning():
-        return
-    _scan_thread = threading.Thread(
-        target=_scan_worker, args=(primary_group_id, include_allies, include_enemies), daemon=True
-    )
-    _scan_thread.start()
+    with _scan_lock:
+        if is_scanning():
+            return False
+        scan_progress.reset()
+        scan_progress.status = "scanning"
+        _scan_thread = threading.Thread(
+            target=_scan_worker, args=(primary_group_id, include_allies, include_enemies), daemon=True
+        )
+        _scan_thread.start()
+        return True
 
 
 def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: bool = False):
@@ -520,6 +534,11 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         group_results = {}
 
         for gi, group in enumerate(groups_to_scan):
+            if p.cancelled:
+                p.log("Scan cancelled")
+                p.status = "cancelled"
+                return
+
             gid = group["id"]
             gname = group["name"]
             p.current_group = gname
@@ -638,6 +657,11 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         with ThreadPoolExecutor(max_workers=WORKER_THREADS) as executor:
             futures = {executor.submit(_lookup_discord, u): u for u in user_list}
             for future in as_completed(futures):
+                if p.cancelled:
+                    p.log("Scan cancelled")
+                    p.status = "cancelled"
+                    return
+
                 try:
                     uid, n_dids, count = future.result()
                     p.users_checked = count

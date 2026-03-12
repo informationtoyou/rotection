@@ -10,6 +10,7 @@ import time
 from scanner import (
     run_scan, scan_progress, is_scanning,
     get_previous_scans, get_scan_by_id, FLAG_TYPES,
+    load_cache, save_cache,
 )
 from dotenv import load_dotenv
 import os
@@ -62,13 +63,31 @@ def list_scans():
     return jsonify(get_previous_scans())
 
 
-# -- api: full scan result by id --
-@app.route("/api/scans/<scan_id>")
-def get_scan(scan_id):
+# -- api: full scan result by id / delete --
+@app.route("/api/scans/<scan_id>", methods=["GET", "DELETE"])
+def get_or_delete_scan(scan_id):
+    if request.method == "DELETE":
+        cache = load_cache()
+        before = len(cache.get("scans", []))
+        cache["scans"] = [s for s in cache.get("scans", []) if s.get("id") != scan_id]
+        if len(cache["scans"]) == before:
+            return jsonify({"error": "Scan not found"}), 404
+        save_cache(cache)
+        return jsonify({"ok": True})
+
     scan = get_scan_by_id(scan_id)
     if not scan:
         return jsonify({"error": "Scan not found"}), 404
     return jsonify(scan)
+
+
+# -- api: cancel a running scan --
+@app.route("/api/scan/cancel", methods=["POST"])
+def cancel_scan():
+    if not is_scanning():
+        return jsonify({"error": "No scan running"}), 400
+    scan_progress.cancel()
+    return jsonify({"ok": True, "message": "Cancellation requested"})
 
 
 # -- api: flag type reference --
