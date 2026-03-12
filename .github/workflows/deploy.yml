@@ -11,6 +11,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 360  # max 6 hours — GitHub Actions hard limit
 
     steps:
     - name: Checkout repository
@@ -29,7 +30,8 @@ jobs:
     - name: Wait for any running scan to finish
       run: |
         echo "Checking if a scan is running..."
-        MAX_WAIT=600
+        # wait up to 5 hours (18000s) — leaves headroom within the 6h job limit
+        MAX_WAIT=18000
         WAITED=0
         while [ $WAITED -lt $MAX_WAIT ]; do
           RESP=$(curl -sf "https://${{ secrets.PA_USERNAME }}.pythonanywhere.com/api/deploy/status" 2>/dev/null || echo '{"scanning":false}')
@@ -39,38 +41,23 @@ jobs:
             break
           fi
           echo "Scan in progress, waiting... (${WAITED}s / ${MAX_WAIT}s)"
-          sleep 10
-          WAITED=$((WAITED + 10))
+          sleep 15
+          WAITED=$((WAITED + 15))
         done
         if [ $WAITED -ge $MAX_WAIT ]; then
-          echo "Warning: Timed out waiting for scan. Deploying anyway."
+          echo "ERROR: Scan still running after 5 hours. Deploying anyway."
         fi
 
-    - name: Create a temporary console and run git pull
-      id: gitpull
+    - name: Run git pull on existing console
       run: |
-        # create a new bash console
-        echo "Creating temporary console..."
-        CREATE_RESP=$(curl -sf -X POST \
-          "${{ env.PA_API_BASE }}/${{ secrets.PA_USERNAME }}/consoles/" \
-          -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d '{"executable": "bash", "arguments": "", "working_directory": "/home/${{ secrets.PA_USERNAME }}/Rotection"}')
-
-        CONSOLE_ID=$(echo "$CREATE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-        echo "Console created: $CONSOLE_ID"
-        echo "console_id=$CONSOLE_ID" >> "$GITHUB_OUTPUT"
-
-        # give the console a moment to initialise
-        sleep 3
-
-        # send the git pull command with a unique marker so we can detect completion
         MARKER="__DEPLOY_DONE_$(date +%s)__"
+
+        # send cd + git pull with a done marker to the existing console
         curl -sf -X POST \
-          "${{ env.PA_API_BASE }}/${{ secrets.PA_USERNAME }}/consoles/${CONSOLE_ID}/send_input/" \
+          "${{ env.PA_API_BASE }}/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
           -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
           -H "Content-Type: application/json" \
-          -d "{\"input\": \"git pull origin main && echo ${MARKER}\\n\"}"
+          -d "{\"input\": \"cd /home/${{ secrets.PA_USERNAME }}/Rotection && git pull origin main && echo ${MARKER}\\n\"}"
 
         echo "Waiting for git pull to finish..."
         MAX_WAIT=60
@@ -79,7 +66,7 @@ jobs:
           sleep 3
           WAITED=$((WAITED + 3))
           OUTPUT=$(curl -sf \
-            "${{ env.PA_API_BASE }}/${{ secrets.PA_USERNAME }}/consoles/${CONSOLE_ID}/get_latest_output/" \
+            "${{ env.PA_API_BASE }}/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/get_latest_output/" \
             -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" || echo "")
           if echo "$OUTPUT" | grep -q "$MARKER"; then
             echo "git pull completed successfully."
@@ -88,19 +75,7 @@ jobs:
           echo "Still pulling... (${WAITED}s)"
         done
         if [ $WAITED -ge $MAX_WAIT ]; then
-          echo "Warning: Timed out waiting for git pull output."
-        fi
-
-    - name: Clean up temporary console
-      if: always()
-      run: |
-        CONSOLE_ID="${{ steps.gitpull.outputs.console_id }}"
-        if [ -n "$CONSOLE_ID" ]; then
-          curl -sf -X DELETE \
-            "${{ env.PA_API_BASE }}/${{ secrets.PA_USERNAME }}/consoles/${CONSOLE_ID}/" \
-            -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
-            && echo "Console $CONSOLE_ID deleted." \
-            || echo "Warning: Could not delete console $CONSOLE_ID"
+          echo "Warning: Timed out waiting for git pull output. Proceeding with reload."
         fi
 
     - name: Reload PythonAnywhere Web App
