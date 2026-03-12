@@ -23,7 +23,7 @@ CORS(app)
 
 DEPLOY_SECRET = os.getenv("DEPLOY_SECRET", "")
 
-# -- deploy state (thread-safe) --
+# -- deploy state (thread-safe) -
 _deploy_lock = threading.Lock()
 _deploy_state = {
     "pending": False,
