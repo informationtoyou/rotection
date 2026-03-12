@@ -7,6 +7,7 @@ from flask import Flask, jsonify, request, render_template, Response
 from flask_cors import CORS
 import json
 import time
+import threading
 from scanner import (
     run_scan, scan_progress, is_scanning,
     get_previous_scans, get_scan_by_id, FLAG_TYPES,
@@ -19,6 +20,35 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+DEPLOY_SECRET = os.getenv("DEPLOY_SECRET", "")
+
+# -- deploy state (thread-safe) --
+_deploy_lock = threading.Lock()
+_deploy_state = {
+    "pending": False,
+    "message": "",
+    "notified_at": None,
+}
+
+
+def get_deploy_state() -> dict:
+    with _deploy_lock:
+        return dict(_deploy_state)
+
+
+def set_deploy_pending(message: str = ""):
+    with _deploy_lock:
+        _deploy_state["pending"] = True
+        _deploy_state["message"] = message or "A new update is being deployed. The site will refresh shortly."
+        _deploy_state["notified_at"] = time.time()
+
+
+def clear_deploy_pending():
+    with _deploy_lock:
+        _deploy_state["pending"] = False
+        _deploy_state["message"] = ""
+        _deploy_state["notified_at"] = None
 
 
 # -- pages --
@@ -127,6 +157,31 @@ def discord_export(scan_id):
         mimetype="application/json",
         headers={"Content-Disposition": f"attachment; filename=rotection_discord_{scan_id}.json"},
     )
+
+
+# -- api: deploy notification (called by GitHub Actions before reload) --
+@app.route("/api/deploy/notify", methods=["POST"])
+def deploy_notify():
+    # authenticate with a shared secret
+    auth = request.headers.get("X-Deploy-Secret", "")
+    if not DEPLOY_SECRET or auth != DEPLOY_SECRET:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json(force=True, silent=True) or {}
+    message = data.get("message", "")
+    set_deploy_pending(message)
+    return jsonify({"ok": True, "scanning": is_scanning()})
+
+
+# -- api: deploy status (polled by frontend) --
+@app.route("/api/deploy/status")
+def deploy_status():
+    state = get_deploy_state()
+    return jsonify({
+        "pending": state["pending"],
+        "message": state["message"],
+        "scanning": is_scanning(),
+    })
 
 
 if __name__ == "__main__":

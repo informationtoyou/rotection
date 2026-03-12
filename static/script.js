@@ -231,6 +231,33 @@ function startProgressStream() {
   }, 1500);
 }
 
+// -- deploy banner polling --
+let _deployTimer = null;
+
+function startDeployPolling() {
+  if (_deployTimer) return;
+  _deployTimer = setInterval(async () => {
+    try {
+      const resp = await fetch(API_BASE + '/api/deploy/status');
+      const d = await resp.json();
+      const banner = document.getElementById('deployBanner');
+      const scanNote = document.getElementById('deployScanNote');
+      const msgEl = document.getElementById('deployMessage');
+      if (d.pending) {
+        if (d.message) msgEl.textContent = d.message;
+        banner.style.display = 'flex';
+        scanNote.style.display = d.scanning ? 'inline' : 'none';
+      } else {
+        banner.style.display = 'none';
+      }
+    } catch (e) {
+      // server may be restarting — hide banner, it'll come back
+      var banner = document.getElementById('deployBanner');
+      if (banner) banner.style.display = 'none';
+    }
+  }, 5000);
+}
+
 // -- load scan results --
 async function loadScanResults(scanId) {
   document.getElementById('resultsContent').innerHTML =
@@ -680,6 +707,9 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s||''; 
 
 // -- init --
 async function init() {
+  // start polling for deploy notifications
+  startDeployPolling();
+
   try {
     var resp = await fetch(API_BASE + '/api/progress');
     var state = await resp.json().catch(function() { return null; });
