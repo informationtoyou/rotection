@@ -17,6 +17,7 @@ This comes with a web dashboard and a CLI. Web verison has live progress, charts
 The web dashboard shows all of this in real time with an ETA, and lets you filter/sort/export the results after. It is highly recommended if you are not a developer to use the web dashboard.
 
 You can find the site hosting this [here](https://rotection.pythonanywhere.com). It is **locked** by password to avoid clankers (exception: ThatOneClankerr as he also happens to be a clanker but not *that* type). If you are SEA Staff, a DL, or someone that's interested, feel free to DM me for credentials (@infoflexy).
+
 ## Self-hosting for the cool kids
 
 ```bash
@@ -50,7 +51,7 @@ DM or make an Issue. Your contribution helps.
 
 ## Running
 
-**Web dashboard:**
+**Web dashboard (local dev):**
 
 ```bash
 python app.py
@@ -63,24 +64,46 @@ python app.py
 python bot.py                        # scan default group (2648601) with allies/enemies
 python bot.py --group=12345          # scan a different group
 python bot.py --no-allies            # skip allied groups
-python bot.py --no-enemies           # skip enemy groups   
+python bot.py --no-enemies           # skip enemy groups
 python bot.py --history              # list previous scans
 python bot.py --load=20260310_1234   # print a saved scan's results
 ```
+
 ## Project structure
 
 ```
-app.py           : Flask server, API routes, SSE streaming
-scanner.py       : All the scanning logic, Rotector + Roblox API calls, threading
-bot.py           : CLI interface (no web server needed)
-templates/
-  index.html     : Single-page dashboard (vanilla JS + Chart.js)
-requirements.txt : Python dependencies
-.env             : API key (gitignored here)
-scan_cache.json  : Saved scan results (auto-generated)
-flagged.txt      : Space-separated Discord IDs from last scan (auto-generated)
+Rotection/
+├── app.py                  — Thin entry point: creates the Flask app and runs it
+├── bot.py                  — CLI interface (no web server needed)
+├── requirements.txt        — Python dependencies
+├── app/
+│   ├── __init__.py         — Flask app factory (create_app)
+│   ├── deploy_state.py     — Thread-safe deploy banner state management
+│   └── routes/
+│       ├── __init__.py     — Registers all blueprints
+│       ├── pages.py        — GET / (serves the dashboard HTML)
+│       ├── scan.py         — /api/scan, /api/progress, /api/scan/cancel, /api/flag-types
+│       ├── scans.py        — /api/scans, /api/scans/<id>, /api/scans/<id>/discord-export
+│       └── deploy.py       — /api/deploy/notify, /api/deploy/status
+├── scanner/
+│   ├── __init__.py         — Re-exports public API (run_scan, is_scanning, etc.)
+│   ├── constants.py        — Endpoints, config, flag types, verification sources
+│   ├── rate_limiter.py     — Thread-safe sliding-window rate limiter
+│   ├── http.py             — Persistent sessions + request helpers (retries, 429 handling)
+│   ├── roblox.py           — Roblox API (groups, allies/enemies, users, thumbnails)
+│   ├── rotector.py         — Rotector API (tracked users, batch lookup, discord IDs)
+│   ├── cache.py            — JSON file cache (load/save/query scan results)
+│   ├── progress.py         — ScanProgress class + global instance
+│   └── engine.py           — run_scan, is_scanning, background _scan_worker
+├── static/
+│   ├── script.js           — Frontend logic (vanilla JS + Chart.js)
+│   └── styles.css          — Dashboard styles
+├── templates/
+│   └── index.html          — Single-page dashboard
+├── .env                    — API keys (gitignored)
+├── scan_cache.json         — Saved scan results (auto-generated)
+└── flagged.txt             — Space-separated Discord IDs from last scan (auto-generated)
 ```
-
 ## Features
 
 - **Threaded scanning**: Discord ID lookups run in parallel (20 threads by default) so scans finish way faster. 20 is the limit for those who do not have an API Key, if you do, 50 threads is the maximum as 500 requests / 10 seconds are allowed.
@@ -94,23 +117,27 @@ flagged.txt      : Space-separated Discord IDs from last scan (auto-generated)
 - **Discord ID export**: copy as space-separated, one-per-line, CSV, or download as JSON with full user details
 - **Scan history** : load any previous scan from the History tab
 - **Group navigation**: click group buttons to filter by specific affiliated groups
+- **Deploy banner**: GitHub Actions notifies the site before deploying; users see a banner and the deploy waits for any running scan to finish
 
 ## Rate limits
 
-- Rotector: 200 requests per 10 seconds (handled automatically)
+- Rotector: 500 requests per 10 seconds (with API key; 200 without)
 - Roblox: 80 requests per 10 seconds (conservative to avoid 429s)
 
 The scanner backs off and retries on 429 responses.
 By default, a maximum of 5 retries.
 Again, this is open-source for a reason.
-Go wild and change it in **scanner.py**.
+Go wild and change it in `scanner/constants.py`.
+
 ## License
 Do whatever the hell you want with this as long as you:
 - Credit @Infoflexy or @informationtoyou
 - **Don't** claim this work as your own. (unless you have contributed, then feel free to brag about how cool you are.)
 - Do not use it to evade bans from Rule 1, 11, 14, 19 in SEA.
+
 ## help is this a virus
 no lmao plz scan on virustotal if this being open-source is not already enough for you
+
 ## Final Notes
 ofc to anyone who criticises this, as Poppe once rightfully said:
 "anything but banning the p3dos" - Mr_Poppe2 March 2026
