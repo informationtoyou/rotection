@@ -787,7 +787,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         p.progress = 100.0
         p.status = "done"
         p.eta_seconds = 0
-        p.set_phase("Complete", "All done!")
+        p.set_phase("Complete", "All done, view Results!")
         p.log(f"Done! {len(all_user_records)} flagged users, {len(unique_discord_ids)} Discord IDs")
         p.log(f"  Took {elapsed:.1f}s. Results in {FLAGGED_FILE} + {CACHE_FILE}")
 
