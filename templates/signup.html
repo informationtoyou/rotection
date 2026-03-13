@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a0a0f">
+<title>Rotection — Sign Up</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<link rel="stylesheet" href="/static/styles.css">
+<style>
+.auth-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.auth-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:36px;width:100%;max-width:520px}
+.auth-card h1{font-size:24px;margin-bottom:4px;display:flex;align-items:center;gap:10px}
+.auth-card h1 .logo{width:36px;height:36px;font-size:17px}
+.auth-sub{font-size:12px;color:var(--text2);margin-bottom:24px}
+.auth-card .form-group{margin-bottom:16px}
+.auth-card .form-group label{display:block;margin-bottom:6px}
+.auth-card .form-group input[type="text"],
+.auth-card .form-group input[type="password"]{width:100%;padding:11px 14px}
+.auth-card .btn-primary{width:100%;justify-content:center;padding:12px;font-size:14px;margin-top:8px}
+.auth-error{background:rgba(239,68,68,.1);border:1px solid var(--red);color:var(--red);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;display:none}
+.auth-links{text-align:center;margin-top:18px;font-size:12px;color:var(--text2)}
+.auth-links a{color:var(--accent2)}
+.security-note{background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--green);margin-top:16px;line-height:1.5}
+.security-note strong{color:#4ade80}
+.role-section{margin-bottom:18px}
+.role-section h3{font-size:13px;font-weight:700;margin-bottom:8px;color:var(--accent2)}
+.role-grid{display:flex;flex-wrap:wrap;gap:8px}
+.role-chip{padding:8px 14px;border:1px solid var(--border);border-radius:8px;font-size:12px;cursor:pointer;transition:all .15s;background:var(--bg3);color:var(--text2);user-select:none}
+.role-chip:hover{border-color:var(--accent);color:var(--text)}
+.role-chip.selected{border-color:var(--accent);background:rgba(99,102,241,.15);color:var(--accent2);font-weight:600}
+.division-section{display:none;margin-bottom:16px;padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:10px}
+.division-section h4{font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600}
+.division-section select{width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px}
+.division-section select option{background:var(--bg);color:var(--text)}
+.mod-div-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.mod-div-chip{padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;background:var(--bg);color:var(--text2);user-select:none;transition:all .15s}
+.mod-div-chip:hover{border-color:var(--accent)}
+.mod-div-chip.selected{border-color:var(--green);background:rgba(34,197,94,.1);color:var(--green)}
+.pending-note{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--yellow);margin-top:10px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h1><div class="logo">R</div> Rotection</h1>
+    <div class="auth-sub">Create your account</div>
+
+    <div class="auth-error" id="authError"></div>
+
+    <form id="signupForm" onsubmit="return doSignup(event)">
+      <!-- ROLES -->
+      <div class="role-section">
+        <h3>What describes you best?</h3>
+        <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Select all that apply</p>
+        <div class="role-grid" id="roleGrid">
+          {% for role in roles %}
+          <div class="role-chip" data-role="{{ role }}" onclick="toggleRole(this)">{{ role }}</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- DIVISION LEADER SECTION! -->
+      <div class="division-section" id="divLeaderSection">
+        <h4>🎖️ Select your division</h4>
+        <select id="divisionSelect" onchange="onDivisionSelect()" disabled>
+          <option value="">Loading divisions...</option>
+        </select>
+        <div class="pending-note">⏳ Your Division Leader access must be confirmed by an admin before you can queue division scans.</div>
+      </div>
+
+      <!-- DIVISION MODERATOR SECTION -->
+      <div class="division-section" id="divModSection">
+        <h4>🛡️ Select divisions you moderate</h4>
+        <p style="font-size:11px;color:var(--text2);margin-bottom:8px">Click to select/deselect</p>
+        <div class="mod-div-grid" id="modDivGrid">
+          <div class="mod-div-chip" style="pointer-events:none;opacity:.5">Loading divisions...</div>
+        </div>
+        <div class="pending-note">⏳ Your Division Moderator access must be confirmed by an admin.</div>
+      </div>
+
+      <!-- CREDENTIALS -->
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="username" autocomplete="username" required minlength="3" maxlength="30" placeholder="3-30 characters">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="password" autocomplete="new-password" required minlength="6" placeholder="At least 6 characters">
+      </div>
+      <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" id="password2" autocomplete="new-password" required minlength="6">
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="signupBtn">Create Account</button>
+    </form>
+
+    <div class="auth-links">
+      Already have an account? <a href="/login">Sign in</a>
+    </div>
+
+    <div class="security-note">
+      🔒 <strong>Security:</strong> Your password is hashed with bcrypt before storage. Nobody can see or recover your password, not even Infoflexy. Your credentials are fully secure.
+    </div>
+  </div>
+</div>
+
+<script>
+var selectedRoles = new Set();
+var selectedModDivs = new Map();
+var affiliatesData = [];
+var affiliatesLoaded = false;
+
+function toggleRole(el) {
+  var role = el.dataset.role;
+  if (selectedRoles.has(role)) { selectedRoles.delete(role); el.classList.remove('selected'); }
+  else { selectedRoles.add(role); el.classList.add('selected'); }
+  // show/hide conditional sections
+  document.getElementById('divLeaderSection').style.display = selectedRoles.has('Division Leader') ? 'block' : 'none';
+  document.getElementById('divModSection').style.display = selectedRoles.has('Moderator at a division') ? 'block' : 'none';
+  // if sections just became visible and affiliates aren't loaded yet, trigger fetch
+  if ((selectedRoles.has('Division Leader') || selectedRoles.has('Moderator at a division')) && !affiliatesLoaded) {
+    fetchAffiliates();
+  }
+}
+
+function onDivisionSelect() {}
+
+function toggleModDiv(el) {
+  var id = el.dataset.id, name = el.dataset.name;
+  if (selectedModDivs.has(id)) { selectedModDivs.delete(id); el.classList.remove('selected'); }
+  else { selectedModDivs.set(id, name); el.classList.add('selected'); }
+}
+
+function renderAffiliates() {
+  // populate division leader select
+  var sel = document.getElementById('divisionSelect');
+  sel.innerHTML = '<option value="">— Select division —</option>';
+  affiliatesData.forEach(function(a) {
+    var opt = document.createElement('option');
+    opt.value = a.id;
+    opt.dataset.name = a.name;
+    opt.textContent = a.name;
+    if (a.relationship === 'enemy') opt.textContent += ' ⚔️';
+    sel.appendChild(opt);
+  });
+  sel.disabled = false;
+
+  // populate moderator division chips
+  var grid = document.getElementById('modDivGrid');
+  grid.innerHTML = '';
+  affiliatesData.forEach(function(a) {
+    var chip = document.createElement('div');
+    chip.className = 'mod-div-chip';
+    chip.dataset.id = String(a.id);
+    chip.dataset.name = a.name;
+    chip.textContent = a.name;
+    if (a.relationship === 'enemy') chip.textContent += ' ⚔️';
+    chip.onclick = function() { toggleModDiv(this); };
+    grid.appendChild(chip);
+  });
+}
+
+async function fetchAffiliates() {
+  if (affiliatesLoaded) return;
+  try {
+    var resp = await fetch('/api/auth/affiliates');
+    var data = await resp.json();
+    if (data.affiliates && data.affiliates.length > 0) {
+      affiliatesData = data.affiliates;
+      affiliatesLoaded = true;
+      renderAffiliates();
+    }
+  } catch(e) {
+    console.error('Failed to fetch affiliates:', e);
+  }
+}
+
+// only fetch when needed — not on page load
+// fetchAffiliates();
+
+async function doSignup(e) {
+  e.preventDefault();
+  var errEl = document.getElementById('authError');
+  var btn = document.getElementById('signupBtn');
+  errEl.style.display = 'none';
+
+  var pw1 = document.getElementById('password').value;
+  var pw2 = document.getElementById('password2').value;
+  if (pw1 !== pw2) {
+    errEl.textContent = 'Passwords do not match';
+    errEl.style.display = 'block';
+    return false;
+  }
+  if (selectedRoles.size === 0) {
+    errEl.textContent = 'Please select at least one role';
+    errEl.style.display = 'block';
+    return false;
+  }
+
+  // check affiliates loaded if needed
+  if ((selectedRoles.has('Division Leader') || selectedRoles.has('Moderator at a division')) && !affiliatesLoaded) {
+    errEl.textContent = 'Divisions are still loading from Roblox. Please wait a moment and try again.';
+    errEl.style.display = 'block';
+    return false;
+  }
+
+  var body = {
+    username: document.getElementById('username').value.trim(),
+    password: pw1,
+    roles: Array.from(selectedRoles)
+  };
+
+  // division leader data
+  if (selectedRoles.has('Division Leader')) {
+    var sel = document.getElementById('divisionSelect');
+    if (!sel.value) {
+      errEl.textContent = 'Please select your division';
+      errEl.style.display = 'block';
+      return false;
+    }
+    body.division_group_id = parseInt(sel.value);
+    body.division_name = sel.options[sel.selectedIndex].dataset.name;
+  }
+
+  // division moderator data
+  if (selectedRoles.has('Moderator at a division')) {
+    if (selectedModDivs.size === 0) {
+      errEl.textContent = 'Please select at least one division you moderate';
+      errEl.style.display = 'block';
+      return false;
+    }
+    body.divisions_moderating = [];
+    selectedModDivs.forEach(function(name, id) {
+      body.divisions_moderating.push({id: parseInt(id), name: name});
+    });
+  }
+
+  btn.disabled = true; btn.textContent = 'Creating account...';
+  try {
+    var resp = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    var data = await resp.json();
+    if (!resp.ok) {
+      errEl.textContent = data.error || 'Signup failed';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Create Account';
+      return false;
+    }
+    window.location.href = '/';
+  } catch(ex) {
+    errEl.textContent = 'Network error: ' + ex.message;
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Create Account';
+  }
+  return false;
+}
+</script>
+</body>
+</html>
