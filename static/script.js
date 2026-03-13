@@ -564,15 +564,18 @@ function goPage(p) { currentPage = p; renderPage(); window.scrollTo({top: 0, beh
 // ──────────────────── Set user status ────────────────────
 async function setUserStatus(robloxId, status) {
   if (!currentScanData) return;
+  // find the user to grab their discord IDs
+  var u = allUsers.find(function(x) { return x.id == robloxId; });
+  var discordIds = (u && u.discord_accounts) ? u.discord_accounts.map(function(d) { return d.id; }) : [];
   try {
     var resp = await fetch(API_BASE + '/api/user-status', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ roblox_id: robloxId, scan_id: currentScanData.id, status: status })
+      body: JSON.stringify({ roblox_id: robloxId, status: status, discord_ids: discordIds })
     });
     var data = await resp.json();
     if (!resp.ok) { alert(data.error || 'Failed to set status'); return; }
-    currentScanStatuses[String(robloxId)] = { status: status, set_by: currentUser.username };
+    currentScanStatuses[String(robloxId)] = { status: status, set_by: currentUser.username, discord_ids: discordIds };
   } catch(e) { alert('Network error'); }
 }
 

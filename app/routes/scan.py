@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request, session
 from scanner import scan_progress, is_scanning, FLAG_TYPES
 from app.database import (
     enqueue_scan, get_queue, get_queue_position, get_queue_entry,
-    set_user_status, get_user_statuses, VALID_STATUSES, PUBLIC_STATUSES,
+    set_user_status, get_user_statuses_for_scan, VALID_STATUSES, PUBLIC_STATUSES,
 )
 from app.routes.auth import login_required, get_current_user
 
@@ -134,11 +134,11 @@ def api_set_user_status():
 
     data = request.get_json(force=True, silent=True) or {}
     roblox_id = str(data.get("roblox_id", ""))
-    scan_id = data.get("scan_id", "")
     status = data.get("status", "")
+    discord_ids = data.get("discord_ids", None)
 
-    if not roblox_id or not scan_id or not status:
-        return jsonify({"error": "roblox_id, scan_id, and status are required"}), 400
+    if not roblox_id or not status:
+        return jsonify({"error": "roblox_id and status are required"}), 400
 
     if status not in VALID_STATUSES:
         return jsonify({"error": f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}"}), 400
@@ -152,7 +152,7 @@ def api_set_user_status():
     if status in ("Suspicious", "Under Investigation") and not user["is_admin"] and not is_div_admin:
         return jsonify({"error": "Only Division Administrators can set this status"}), 403
 
-    ok = set_user_status(roblox_id, scan_id, status, user["username"])
+    ok = set_user_status(roblox_id, status, user["username"], discord_ids)
     if not ok:
         return jsonify({"error": "Failed to set status"}), 500
 
@@ -163,7 +163,15 @@ def api_set_user_status():
 @login_required
 def api_get_user_statuses(scan_id):
     user = get_current_user()
-    statuses = get_user_statuses(scan_id)
+
+    # load the scan to get roblox IDs in it
+    from scanner.cache import get_scan_by_id
+    scan_data = get_scan_by_id(scan_id)
+    if not scan_data:
+        return jsonify({})
+
+    roblox_ids = [str(uid) for uid in (scan_data.get("users") or {}).keys()]
+    statuses = get_user_statuses_for_scan(roblox_ids)
 
     # non-admin, non-div-admin users only see public statuses
     is_div_admin = _has_role(user, "Division Administrator") and user["admin_confirmed"]

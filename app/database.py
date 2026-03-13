@@ -69,18 +69,45 @@ def init_db():
                 finished_at TEXT
             );
 
-            CREATE TABLE IF NOT EXISTS user_statuses (
-                roblox_id   TEXT NOT NULL,
-                scan_id     TEXT NOT NULL,
-                status      TEXT NOT NULL DEFAULT 'Pending Review',
-                set_by      TEXT,
-                set_at      TEXT DEFAULT (datetime('now')),
-                PRIMARY KEY (roblox_id, scan_id)
-            );
-
             CREATE INDEX IF NOT EXISTS idx_scan_queue_status ON scan_queue(status);
-            CREATE INDEX IF NOT EXISTS idx_user_statuses_scan ON user_statuses(scan_id);
         """)
+
+        # ── migrate user_statuses to global (roblox_id-only primary key) ──
+        # check if the old scan_id-based table exists
+        old = db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='user_statuses'"
+        ).fetchone()
+
+        if old and "scan_id" in (old["sql"] or ""):
+            # old schema — migrate data (keep latest status per roblox_id)
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS user_statuses_new (
+                    roblox_id   TEXT PRIMARY KEY NOT NULL,
+                    status      TEXT NOT NULL DEFAULT 'Pending Review',
+                    discord_ids TEXT DEFAULT '[]',
+                    set_by      TEXT,
+                    set_at      TEXT DEFAULT (datetime('now'))
+                );
+
+                INSERT OR IGNORE INTO user_statuses_new (roblox_id, status, set_by, set_at)
+                SELECT roblox_id, status, set_by, set_at
+                FROM user_statuses
+                ORDER BY set_at DESC;
+
+                DROP TABLE user_statuses;
+                ALTER TABLE user_statuses_new RENAME TO user_statuses;
+            """)
+        else:
+            # fresh install or already migrated
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS user_statuses (
+                    roblox_id   TEXT PRIMARY KEY NOT NULL,
+                    status      TEXT NOT NULL DEFAULT 'Pending Review',
+                    discord_ids TEXT DEFAULT '[]',
+                    set_by      TEXT,
+                    set_at      TEXT DEFAULT (datetime('now'))
+                );
+            """)
 
 
 def ensure_admin():
@@ -322,36 +349,61 @@ VALID_STATUSES = ["Pending Review", "SEA Banned", "False Positive", "Suspicious"
 PUBLIC_STATUSES = ["SEA Banned", "False Positive"]
 
 
-def set_user_status(roblox_id: str, scan_id: str, status: str, set_by: str):
+def set_user_status(roblox_id: str, status: str, set_by: str,
+                    discord_ids: list[str] | None = None):
+    """Set a global status for a roblox user. Persists across all scans."""
     if status not in VALID_STATUSES:
         return False
+    discord_json = json.dumps(discord_ids or [])
     with get_db() as db:
+        # if we already have discord_ids stored and none were provided, keep old ones
+        if discord_ids is None:
+            existing = db.execute(
+                "SELECT discord_ids FROM user_statuses WHERE roblox_id = ?", (roblox_id,)
+            ).fetchone()
+            if existing:
+                discord_json = existing["discord_ids"] or "[]"
         db.execute(
-            """INSERT OR REPLACE INTO user_statuses (roblox_id, scan_id, status, set_by, set_at)
+            """INSERT OR REPLACE INTO user_statuses (roblox_id, status, discord_ids, set_by, set_at)
                VALUES (?, ?, ?, ?, datetime('now'))""",
-            (roblox_id, scan_id, status, set_by),
+            (roblox_id, status, discord_json, set_by),
         )
     return True
 
 
-def get_user_statuses(scan_id: str) -> dict:
+def get_user_statuses_for_scan(roblox_ids: list[str]) -> dict:
+    """Get global statuses for a list of roblox IDs (for displaying in a scan)."""
+    if not roblox_ids:
+        return {}
     with get_db() as db:
+        placeholders = ",".join("?" for _ in roblox_ids)
         rows = db.execute(
-            "SELECT roblox_id, status, set_by, set_at FROM user_statuses WHERE scan_id = ?",
-            (scan_id,),
+            f"SELECT roblox_id, status, discord_ids, set_by, set_at FROM user_statuses WHERE roblox_id IN ({placeholders})",
+            roblox_ids,
         ).fetchall()
-    return {r["roblox_id"]: {"status": r["status"], "set_by": r["set_by"], "set_at": r["set_at"]} for r in rows}
+    return {
+        r["roblox_id"]: {
+            "status": r["status"],
+            "discord_ids": json.loads(r["discord_ids"] or "[]"),
+            "set_by": r["set_by"],
+            "set_at": r["set_at"],
+        }
+        for r in rows
+    }
 
 
 def get_all_user_statuses() -> dict:
-    """Get all statuses across all scans, keyed by roblox_id."""
+    """Get all statuses, keyed by roblox_id."""
     with get_db() as db:
         rows = db.execute(
-            "SELECT roblox_id, status, set_by, set_at, scan_id FROM user_statuses ORDER BY set_at DESC"
+            "SELECT roblox_id, status, discord_ids, set_by, set_at FROM user_statuses"
         ).fetchall()
-    result = {}
-    for r in rows:
-        rid = r["roblox_id"]
-        if rid not in result:
-            result[rid] = {"status": r["status"], "set_by": r["set_by"], "set_at": r["set_at"], "scan_id": r["scan_id"]}
-    return result
+    return {
+        r["roblox_id"]: {
+            "status": r["status"],
+            "discord_ids": json.loads(r["discord_ids"] or "[]"),
+            "set_by": r["set_by"],
+            "set_at": r["set_at"],
+        }
+        for r in rows
+    }
