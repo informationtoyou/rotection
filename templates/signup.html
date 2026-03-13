@@ -101,7 +101,7 @@
     </div>
 
     <div class="security-note">
-      🔒 <strong>Security:</strong> Your password is hashed with bcrypt before storage. Nobody can see or recover your password — not even the admin or webmaster. Your credentials are fully secure.
+      🔒 <strong>Security:</strong> Your password is hashed with bcrypt before storage. Nobody can see or recover your password, not even Infoflexy. Your credentials are fully secure.
     </div>
   </div>
 </div>
@@ -188,8 +188,8 @@ async function fetchAffiliates() {
   }
 }
 
-// start fetching immediately on page load
-fetchAffiliates();
+// only fetch when needed — not on page load
+// fetchAffiliates();
 
 async function doSignup(e) {
   e.preventDefault();
