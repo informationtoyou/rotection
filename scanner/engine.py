@@ -179,9 +179,10 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         p.users_total = len(all_user_records)
         p.log(f"Total unique tracked users: {len(all_user_records)}")
 
-        # ---- phase 2.4: tag SEA Military HR/HC users (~7 API calls, very fast) ----
+        # ---- phase 2.4: tag SEA Military HR/HC users (~15 API calls, rate-limited) ----
         scanning_sea = any(g["id"] == SEA_MILITARY_GROUP_ID for g in groups_to_scan)
         if scanning_sea:
+            p.set_phase("Tagging HR/HC ranks", "Fetching SEA Military role members from Roblox (rate-limited, may take a moment)")
             p.log("Tagging SEA Military HR/HC ranks...")
             try:
                 hrhc_ids = get_sea_hrhc_user_ids(log=p.log)
@@ -192,7 +193,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                         tagged += 1
                     else:
                         rec["is_sea_hrhc"] = False
-                p.log(f"  Tagged {tagged} users as SEA HR/HC")
+                p.log(f"  Tagged {tagged} users as SEA HR/HC (out of {len(hrhc_ids)} total HR/HC members)")
             except Exception as exc:
                 p.log(f"  ⚠ HR/HC tagging failed (non-fatal): {exc}")
                 for rec in all_user_records.values():
@@ -200,6 +201,9 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         else:
             for rec in all_user_records.values():
                 rec["is_sea_hrhc"] = False
+
+        p.progress = 32.0
+        p.update_eta()
 
         # ---- phase 2.5: fill in ALL missing usernames from Roblox ----
         missing_names = [int(uid) for uid, rec in all_user_records.items()

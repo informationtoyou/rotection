@@ -101,18 +101,17 @@ def get_user_thumbnail(user_id: int) -> str | None:
 
 def get_sea_hrhc_user_ids(log=print) -> set:
     """Fetch all user IDs that hold an HR/HC rank in SEA Military.
-    Uses the roles endpoint: 1 call for roles list + 1 call per matching role.
-    Typically ≤7 API calls total."""
+    Uses the roles endpoint: 1 call for roles list + 1 call per matching role."""
     hrhc_ids = set()
     roles_data = roblox_get(f"{ROBLOX_GROUPS_API}/v1/groups/{SEA_MILITARY_GROUP_ID}/roles")
+
     if not roles_data or "roles" not in roles_data:
-        log("  ⚠ Could not fetch SEA Military roles")
+        log("  ⚠ Could not fetch SEA Military roles (empty response)")
         return hrhc_ids
 
     matching_roles = []
     for role in roles_data["roles"]:
         role_name = role.get("name", "")
-        # Role names are like "[HR1] Ensign", "[HC2] Major" — check if they start with a known prefix
         if any(role_name.startswith(prefix) for prefix in SEA_HRHC_PREFIXES):
             matching_roles.append(role)
 
@@ -122,10 +121,12 @@ def get_sea_hrhc_user_ids(log=print) -> set:
 
     log(f"  Found {len(matching_roles)} HR/HC roles to check: {', '.join(r['name'] for r in matching_roles)}")
 
-    for role in matching_roles:
+    for ri, role in enumerate(matching_roles):
         role_id = role["id"]
         role_name = role["name"]
         cursor = None
+        pages = 0
+        role_count = 0
         while True:
             params = {"limit": 100, "sortOrder": "Asc"}
             if cursor:
@@ -138,9 +139,11 @@ def get_sea_hrhc_user_ids(log=print) -> set:
                 break
             for u in data.get("data", []):
                 hrhc_ids.add(u["userId"])
+                role_count += 1
             cursor = data.get("nextPageCursor")
-            if not cursor:
+            pages += 1
+            if not cursor or pages > 20:
                 break
-        log(f"    {role_name}: found members (total HR/HC so far: {len(hrhc_ids)})")
+        log(f"    [{ri+1}/{len(matching_roles)}] {role_name}: {role_count} members ({pages} page(s))")
 
     return hrhc_ids
