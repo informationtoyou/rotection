@@ -316,12 +316,15 @@ function startProgressStream() {
 
       if (d.logs && d.logs.length > 0) {
         var logEl = document.getElementById('logConsole');
+        var isNearBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 50;
         var frag = document.createDocumentFragment();
         d.logs.forEach(function(line) {
           var div = document.createElement('div'); div.className = 'log-line'; div.textContent = line; frag.appendChild(div);
         });
-        logEl.appendChild(frag); logEl.scrollTop = logEl.scrollHeight;
+        logEl.appendChild(frag);
+        if (isNearBottom) logEl.scrollTop = logEl.scrollHeight;
       }
+
       _logCursor = d.log_count;
 
       document.getElementById('sPhase').textContent = d.phase || '—';
