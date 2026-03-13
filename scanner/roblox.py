@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from scanner.constants import (
     ROBLOX_GROUPS_API, ROBLOX_USERS_API, ROBLOX_THUMBNAILS_API, WORKER_THREADS,
-    SEA_MILITARY_GROUP_ID, SEA_HRHC_RANKS,
+    SEA_MILITARY_GROUP_ID, SEA_HRHC_PREFIXES,
 )
 from scanner.http import roblox_get, roblox_post
 
@@ -112,7 +112,8 @@ def get_sea_hrhc_user_ids(log=print) -> set:
     matching_roles = []
     for role in roles_data["roles"]:
         role_name = role.get("name", "")
-        if role_name in SEA_HRHC_RANKS:
+        # Role names are like "[HR1] Ensign", "[HC2] Major" — check if they start with a known prefix
+        if any(role_name.startswith(prefix) for prefix in SEA_HRHC_PREFIXES):
             matching_roles.append(role)
 
     if not matching_roles:
