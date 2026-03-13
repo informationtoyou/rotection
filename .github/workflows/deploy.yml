@@ -64,7 +64,7 @@ jobs:
           "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
           -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
           -H "Content-Type: application/json" \
-          -d '{"input":"cd ~/Rotection && git fetch origin main && git reset --hard origin/main\n"}'
+          -d '{"input":"cd ~/mysite/rotection && git fetch origin main && git reset --hard origin/main\n"}'
         echo "Sent git fetch + reset. Waiting 10s..."
         sleep 10
 
@@ -74,7 +74,7 @@ jobs:
           "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
           -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
           -H "Content-Type: application/json" \
-          -d '{"input":"pip install -r ~/Rotection/requirements.txt 2>&1 | tail -5\n"}'
+          -d '{"input":"pip install -r ~/mysite/rotection/requirements.txt 2>&1 | tail -5\n"}'
         echo "Sent pip install. Waiting 15s..."
         sleep 15
 
