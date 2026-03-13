@@ -162,26 +162,15 @@ function renderAffiliates() {
   });
 }
 
-var _affiliateTimer = null;
 async function fetchAffiliates() {
   if (affiliatesLoaded) return;
   try {
     var resp = await fetch('/api/auth/affiliates');
     var data = await resp.json();
-    if (data.loaded && data.affiliates && data.affiliates.length > 0) {
+    if (data.affiliates && data.affiliates.length > 0) {
       affiliatesData = data.affiliates;
       affiliatesLoaded = true;
       renderAffiliates();
-      if (_affiliateTimer) { clearInterval(_affiliateTimer); _affiliateTimer = null; }
-      return;
-    }
-    // still loading — poll every 2s
-    if (!_affiliateTimer) {
-      var sel = document.getElementById('divisionSelect');
-      sel.innerHTML = '<option value="">⏳ Loading divisions from Roblox...</option>';
-      sel.disabled = true;
-      document.getElementById('modDivGrid').innerHTML = '<div class="mod-div-chip" style="pointer-events:none;opacity:.5">⏳ Loading divisions from Roblox...</div>';
-      _affiliateTimer = setInterval(fetchAffiliates, 2000);
     }
   } catch(e) {
     console.error('Failed to fetch affiliates:', e);

@@ -1,194 +1,83 @@
 """
-Fetches and caches SEA Military affiliates (allies + enemies) from the Roblox API.
-Excludes CFront Interactive.  Refreshes in the background so startup isn't blocked.
-Persists to disk so restarts don't require a fresh fetch.
+Static list of SEA Military affiliates (allies + enemies).
+Hardcoded — no Roblox API calls needed.
 """
 
-import json
-import os
-import threading
-import time
-import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-from scanner.roblox import get_allied_groups, get_enemy_groups
-
-log = logging.getLogger(__name__)
-
-SEA_MILITARY_GROUP_ID = 2648601
-CFRONT_INTERACTIVE_ID = 10958729
-CACHE_TTL = 3600  # 1 hour
-DISK_CACHE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "affiliates_cache.json")
-
-_lock = threading.Lock()
-_affiliates: list[dict] = []
-_last_fetched: float = 0.0
-_loading: bool = False
-
-
-# ──────────────────── Disk cache ────────────────────
-
-def _load_disk_cache() -> tuple[list[dict], float]:
-    """Load affiliates from disk cache. Returns (affiliates, timestamp)."""
-    try:
-        if os.path.exists(DISK_CACHE_PATH):
-            with open(DISK_CACHE_PATH, "r") as f:
-                data = json.load(f)
-            return data.get("affiliates", []), data.get("fetched_at", 0.0)
-    except (json.JSONDecodeError, IOError, KeyError) as exc:
-        log.warning("Failed to read affiliates disk cache: %s", exc)
-    return [], 0.0
-
-
-def _save_disk_cache(affiliates: list[dict], fetched_at: float):
-    """Persist affiliates to disk."""
-    try:
-        with open(DISK_CACHE_PATH, "w") as f:
-            json.dump({"affiliates": affiliates, "fetched_at": fetched_at}, f, separators=(",", ":"))
-    except IOError as exc:
-        log.warning("Failed to write affiliates disk cache: %s", exc)
-
-
-# ──────────────────── Fetch ────────────────────
-
-def _fetch() -> list[dict]:
-    """Hit the Roblox API for allies + enemies of SEA Military in parallel."""
-    allies = []
-    enemies = []
-
-    def _get_allies():
-        nonlocal allies
-        try:
-            allies = get_allied_groups(SEA_MILITARY_GROUP_ID)
-        except Exception as exc:
-            log.warning("Failed to fetch allies: %s", exc)
-
-    def _get_enemies():
-        nonlocal enemies
-        try:
-            enemies = get_enemy_groups(SEA_MILITARY_GROUP_ID)
-        except Exception as exc:
-            log.warning("Failed to fetch enemies: %s", exc)
-
-    # fetch allies and enemies in parallel
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(_get_allies), executor.submit(_get_enemies)]
-        for f in as_completed(futures):
-            try:
-                f.result()
-            except Exception:
-                pass
-
-    if not allies and not enemies:
-        log.warning("Both ally and enemy fetches returned empty")
-        return []
-
-    seen: set[int] = set()
-    result: list[dict] = []
-
-    # always include SEA Military itself
-    result.append({"id": SEA_MILITARY_GROUP_ID, "name": "SEA Military", "memberCount": 0, "relationship": "self"})
-    seen.add(SEA_MILITARY_GROUP_ID)
-
-    for g in allies:
-        gid = g["id"]
-        if gid == CFRONT_INTERACTIVE_ID or gid in seen:
-            continue
-        seen.add(gid)
-        result.append({
-            "id": gid,
-            "name": g.get("name", f"Group {gid}"),
-            "memberCount": g.get("memberCount", 0),
-            "relationship": "ally",
-        })
-
-    for g in enemies:
-        gid = g["id"]
-        if gid == CFRONT_INTERACTIVE_ID or gid in seen:
-            continue
-        seen.add(gid)
-        result.append({
-            "id": gid,
-            "name": g.get("name", f"Group {gid}"),
-            "memberCount": g.get("memberCount", 0),
-            "relationship": "enemy",
-        })
-
-    result.sort(key=lambda x: x["name"].lower())
-    return result
-
-
-def _background_refresh():
-    """Runs in a daemon thread to populate the cache without blocking startup."""
-    global _affiliates, _last_fetched, _loading
-    try:
-        data = _fetch()
-        if data:
-            now = time.time()
-            with _lock:
-                _affiliates = data
-                _last_fetched = now
-            _save_disk_cache(data, now)
-            log.info("Loaded %d SEA affiliates from Roblox API", len(data))
-        else:
-            log.warning("Roblox API returned no affiliates — cache unchanged")
-    finally:
-        with _lock:
-            _loading = False
+_AFFILIATES = [
+    {"id": 35243308, "name": "(SEA) Royal British Air Force", "memberCount": 752, "relationship": "ally"},
+    {"id": 11107947, "name": "(SEA) The New Order", "memberCount": 730, "relationship": "ally"},
+    {"id": 490464235, "name": "[ Content Deleted 490464235 ]", "memberCount": 181, "relationship": "enemy"},
+    {"id": 34982331, "name": "[PIRATE] Alien Force", "memberCount": 316, "relationship": "enemy"},
+    {"id": 15040855, "name": "[PIRATE] Imperial Kazes", "memberCount": 2968, "relationship": "enemy"},
+    {"id": 35492566, "name": "[PIRATE] Lost Souls", "memberCount": 575, "relationship": "enemy"},
+    {"id": 9790017, "name": "[PIRATE] Neptune Raiders", "memberCount": 3070, "relationship": "enemy"},
+    {"id": 11664993, "name": "[PIRATE] Russian Air", "memberCount": 2212, "relationship": "enemy"},
+    {"id": 34016362, "name": "[SEA] 77th Naval Squadron", "memberCount": 627, "relationship": "ally"},
+    {"id": 36036468, "name": "[SEA] Aegis Command Operatives", "memberCount": 1189, "relationship": "ally"},
+    {"id": 34411993, "name": "[SEA] Aerial Aggressor Squadron", "memberCount": 1144, "relationship": "ally"},
+    {"id": 35484910, "name": "[SEA] Aerial Command Echelon", "memberCount": 1771, "relationship": "ally"},
+    {"id": 15116364, "name": "[SEA] Air Support", "memberCount": 2173, "relationship": "ally"},
+    {"id": 4446616, "name": "[SEA] Aviation Corps", "memberCount": 6110, "relationship": "ally"},
+    {"id": 16293262, "name": "[SEA] Black Marine Corps", "memberCount": 3754, "relationship": "ally"},
+    {"id": 35442966, "name": "[SEA] Delta Force One", "memberCount": 1064, "relationship": "ally"},
+    {"id": 17159055, "name": "[SEA] Demolition Corps", "memberCount": 1344, "relationship": "ally"},
+    {"id": 12371875, "name": "[SEA] Dragons", "memberCount": 778, "relationship": "ally"},
+    {"id": 34810510, "name": "[SEA] Elite Air Corporation", "memberCount": 1014, "relationship": "ally"},
+    {"id": 866983605, "name": "[SEA] European United Forces", "memberCount": 346, "relationship": "ally"},
+    {"id": 362243603, "name": "[SEA] Finnish Army", "memberCount": 128, "relationship": "ally"},
+    {"id": 16992878, "name": "[SEA] First Air Force", "memberCount": 3854, "relationship": "ally"},
+    {"id": 34486626, "name": "[SEA] First Anti Air Defense", "memberCount": 877, "relationship": "ally"},
+    {"id": 35919868, "name": "[SEA] Fish Legion", "memberCount": 638, "relationship": "ally"},
+    {"id": 35548083, "name": "[SEA] Frost Squadron", "memberCount": 1236, "relationship": "ally"},
+    {"id": 16956613, "name": "[SEA] Intelligence Command", "memberCount": 1625, "relationship": "ally"},
+    {"id": 4083936, "name": "[SEA] Lions Division", "memberCount": 34, "relationship": "ally"},
+    {"id": 16808829, "name": "[SEA] Marine Reserved Forces", "memberCount": 2624, "relationship": "ally"},
+    {"id": 973970008, "name": "[SEA] Maritime Assault Division", "memberCount": 804, "relationship": "ally"},
+    {"id": 16054109, "name": "[SEA] National Defence", "memberCount": 769, "relationship": "ally"},
+    {"id": 33671139, "name": "[SEA] Naval Raptors", "memberCount": 746, "relationship": "ally"},
+    {"id": 33831580, "name": "[SEA] NAVAL SPECIAL OPERATIONS DIVISION", "memberCount": 1912, "relationship": "ally"},
+    {"id": 34590032, "name": "[SEA] Naval Vanguard", "memberCount": 737, "relationship": "ally"},
+    {"id": 13111733, "name": "[SEA] Navy SEALS", "memberCount": 10475, "relationship": "ally"},
+    {"id": 16818877, "name": "[SEA] Orion's Sentinels", "memberCount": 3138, "relationship": "ally"},
+    {"id": 34122556, "name": "[SEA] Phantom Corps", "memberCount": 1378, "relationship": "ally"},
+    {"id": 16599648, "name": "[SEA] Purple Legion", "memberCount": 1025, "relationship": "ally"},
+    {"id": 33045730, "name": "[SEA] Royal Dutch Air Force", "memberCount": 1360, "relationship": "ally"},
+    {"id": 34495681, "name": "[SEA] Sea Warriors Squadron", "memberCount": 805, "relationship": "ally"},
+    {"id": 34234378, "name": "[SEA] Spanish Naval Operatives", "memberCount": 1141, "relationship": "ally"},
+    {"id": 15857418, "name": "[SEA] Spearhead Command", "memberCount": 3402, "relationship": "ally"},
+    {"id": 16377732, "name": "[SEA] Special Air Service Regiment [SASR]", "memberCount": 2196, "relationship": "ally"},
+    {"id": 33163141, "name": "[SEA] Stormy Waters", "memberCount": 1026, "relationship": "ally"},
+    {"id": 385513346, "name": "[SEA] Strategic Air Regiment", "memberCount": 1101, "relationship": "ally"},
+    {"id": 32848248, "name": "[SEA] Swedish Amphibious Corps", "memberCount": 406, "relationship": "ally"},
+    {"id": 35821130, "name": "[SEA] THE SENTRY GUARD", "memberCount": 636, "relationship": "ally"},
+    {"id": 34946711, "name": "[SEA] Titan Legion", "memberCount": 573, "relationship": "ally"},
+    {"id": 13835398, "name": "[SEA] Trident Tribune", "memberCount": 699, "relationship": "ally"},
+    {"id": 32735663, "name": "[SEA] United Nations Peacekeeping", "memberCount": 3404, "relationship": "ally"},
+    {"id": 10951424, "name": "[SEA] UNITED STATES NAVY", "memberCount": 1112, "relationship": "ally"},
+    {"id": 32807712, "name": "[SEA] Virendian Imperium", "memberCount": 1686, "relationship": "ally"},
+    {"id": 12603853, "name": "SEA Attack Force", "memberCount": 2480, "relationship": "ally"},
+    {"id": 34346876, "name": "SEA Coastline Marine Corps", "memberCount": 1228, "relationship": "ally"},
+    {"id": 2648601, "name": "SEA Military", "memberCount": 0, "relationship": "self"},
+    {"id": 11782537, "name": "SEA Visitors Division", "memberCount": 3281, "relationship": "ally"},
+    {"id": 10497374, "name": "Somalian Cove", "memberCount": 5491, "relationship": "enemy"},
+]
 
 
 def get_sea_affiliates() -> list[dict]:
-    """Return cached affiliates.  Triggers a background refresh if stale or empty."""
-    global _loading
-    with _lock:
-        stale = (time.time() - _last_fetched) > CACHE_TTL
-        need_refresh = (not _affiliates or stale) and not _loading
-
-    if need_refresh:
-        with _lock:
-            _loading = True
-        t = threading.Thread(target=_background_refresh, daemon=True)
-        t.start()
-
-    with _lock:
-        return list(_affiliates)
+    return list(_AFFILIATES)
 
 
 def get_affiliate_ids() -> set[int]:
-    """Return the set of valid affiliate group IDs."""
-    return {a["id"] for a in get_sea_affiliates()}
+    return {a["id"] for a in _AFFILIATES}
 
 
 def is_affiliates_loaded() -> bool:
-    """True once the first fetch has completed successfully."""
-    with _lock:
-        return len(_affiliates) > 0
+    return True
 
 
 def is_affiliates_loading() -> bool:
-    """True while a background fetch is in progress."""
-    with _lock:
-        return _loading
+    return False
 
 
 def init_affiliates():
-    """Kick off the initial background fetch.  Call once at app startup.
-    Loads disk cache first for instant availability."""
-    global _affiliates, _last_fetched, _loading
-
-    # load disk cache first — instant availability
-    cached, cached_at = _load_disk_cache()
-    if cached:
-        with _lock:
-            _affiliates = cached
-            _last_fetched = cached_at
-        log.info("Restored %d affiliates from disk cache (age: %ds)",
-                 len(cached), int(time.time() - cached_at))
-
-    # if disk cache is stale or empty, refresh in background
-    with _lock:
-        stale = (time.time() - _last_fetched) > CACHE_TTL
-        if (not _affiliates or stale) and not _loading:
-            _loading = True
-            t = threading.Thread(target=_background_refresh, daemon=True)
-            t.start()
+    pass
