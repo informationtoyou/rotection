@@ -2,7 +2,7 @@
 
 Scans SEA Military (and its affiliates, so everyone!) or its divisions, or ANY other group using [Rotector's](https://rotector.com) convenient [API](https://roscoe.rotector.com), resolves their Discord and Roblox accounts, and gives you a list of Discord IDs to massban!
 
-This comes with a web dashboard and a CLI. Web verison has live progress, charts, statistic, and export options.
+This comes with a web dashboard and a CLI. Web version has live progress, charts, statistic, and export options.
 
 ## What does this do?
 
