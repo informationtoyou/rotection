@@ -74,8 +74,8 @@ jobs:
           "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
           -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
           -H "Content-Type: application/json" \
-          -d '{"input":"pip install -r ~/mysite/rotection/requirements.txt 2>&1 | tail -5\n"}'
-        echo "Sent pip install. Waiting 15s..."
+          -d '{"input":"source ~/.virtualenvs/myvirtualenv/bin/activate && pip install -r ~/mysite/rotection/requirements.txt 2>&1 | tail -5\n"}'
+        echo "Sent pip install (in virtualenv). Waiting 15s..."
         sleep 15
 
     - name: Reload web app
