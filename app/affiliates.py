@@ -60,6 +60,7 @@ _AFFILIATES = [
     {"id": 2648601, "name": "SEA Military", "memberCount": 0, "relationship": "self"},
     {"id": 11782537, "name": "SEA Visitors Division", "memberCount": 3281, "relationship": "ally"},
     {"id": 10497374, "name": "Somalian Cove", "memberCount": 5491, "relationship": "enemy"},
+    {"id": 582470626, "name": "[PIRATE] Karolinska Bataljonen", "memberCount": 58, "relationship": "enemy"},
 ]
 
 
