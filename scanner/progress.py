@@ -26,6 +26,7 @@ class ScanProgress:
         self.scan_id: str | None = None
         self.eta_seconds: float | None = None
         self.start_time: float | None = None
+        self.requested_by: str | None = None
 
     def reset(self):
         with self.lock:
@@ -45,6 +46,7 @@ class ScanProgress:
             self.scan_id = None
             self.eta_seconds = None
             self.start_time = None
+            self.requested_by = None
 
     def cancel(self):
         self._cancel.set()
@@ -96,6 +98,7 @@ class ScanProgress:
                 "discord_ids_found": self.discord_ids_found,
                 "scan_id": self.scan_id,
                 "eta_seconds": round(self.eta_seconds, 0) if self.eta_seconds is not None else None,
+                "requested_by": self.requested_by,
             }
 
 

@@ -76,10 +76,17 @@
         "Scan all of SEA" scans <strong>SEA Military</strong> (2648601) + all official divisions.
       </p>
 
-      <!-- DIVISION QUICK SCAN (for division leaders/mods) -->
+      <!-- DIVISION QUICK SCAN (for division leaders) -->
       <div id="divisionQuickScan" style="display:none">
         <button class="btn btn-secondary" id="btnScanMyDivision" onclick="scanMyDivision()" style="margin-bottom:12px">
           🎖️ Scan My Division
+        </button>
+      </div>
+
+      <!-- MODERATED DIVISIONS QUICK SCAN (for division moderators) -->
+      <div id="modDivisionsQuickScan" style="display:none">
+        <button class="btn btn-secondary" id="btnScanModDivisions" onclick="scanMyModeratedDivisions()" style="margin-bottom:12px">
+          🛡️ Scan My Moderated Divisions
         </button>
       </div>
 

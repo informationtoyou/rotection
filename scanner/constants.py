@@ -1,5 +1,5 @@
 """
-Constatns and config
+Constants and config
 """
 
 import os
@@ -18,6 +18,13 @@ ROBLOX_THUMBNAILS_API = "https://thumbnails.roblox.com"
 # -- files --
 CACHE_FILE = "scan_cache.json"
 FLAGGED_FILE = "flagged.txt"
+
+# -- SEA Military HR/HC ranks --
+SEA_MILITARY_GROUP_ID = 2648601
+SEA_HRHC_RANKS = {
+    "HR1", "HR2", "HR3",
+    "HC1", "HC2", "HC3",
+}
 
 # -- rate limits --
 ROTECTOR_RATE_LIMIT = 500
