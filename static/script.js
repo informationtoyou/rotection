@@ -43,6 +43,7 @@ function canSetStatus() {
   if (!currentUser) return false;
   if (currentUser.is_admin) return true;
   if (currentUser.roles.includes('Division Administrator') && currentUser.admin_confirmed) return true;
+  if (currentUser.roles.includes('SEA Moderator')) return true;
   return false;
 }
 function canSeeInternalStatuses() { return canSetStatus(); }
@@ -94,13 +95,16 @@ async function loadCurrentUser() {
     if (needsConfirm) {
       document.getElementById('pendingBanner').style.display = 'flex';
     }
-    // show division quick scan button
+    // show division quick scan button for Division Leaders (confirmed)
     if (currentUser.division_group_id && currentUser.division_confirmed) {
       document.getElementById('divisionQuickScan').style.display = 'block';
       document.getElementById('btnScanMyDivision').textContent = '🎖️ Scan ' + (currentUser.division_name || 'My Division');
-    } else if (currentUser.divisions_mod_confirmed && currentUser.divisions_mod_confirmed.length > 0) {
-      document.getElementById('divisionQuickScan').style.display = 'block';
-      document.getElementById('btnScanMyDivision').textContent = '🎖️ Scan My Division';
+    }
+    // show moderated divisions quick scan button for Division Moderators (confirmed)
+    if (currentUser.divisions_mod_confirmed && currentUser.divisions_mod_confirmed.length > 0) {
+      document.getElementById('modDivisionsQuickScan').style.display = 'block';
+      var modNames = currentUser.divisions_mod_confirmed.map(function(d) { return d.name || ('Group ' + d.id); });
+      document.getElementById('btnScanModDivisions').textContent = '🛡️ Scan My Moderated Divisions (' + modNames.length + ')';
     }
     return currentUser;
   } catch(e) {
@@ -139,12 +143,48 @@ async function scanMyDivision() {
   if (currentUser.division_group_id && currentUser.division_confirmed) {
     gid = currentUser.division_group_id;
     name = currentUser.division_name || 'My Division';
-  } else if (currentUser.divisions_mod_confirmed && currentUser.divisions_mod_confirmed.length > 0) {
-    gid = currentUser.divisions_mod_confirmed[0].id;
-    name = currentUser.divisions_mod_confirmed[0].name || 'My Division';
   }
   if (!gid) { alert('No confirmed division found'); return; }
   await _doScan(gid, false, false, document.getElementById('btnScanMyDivision'), '🎖️ Scan ' + name);
+}
+
+async function scanMyModeratedDivisions() {
+  if (!currentUser) return;
+  var divs = currentUser.divisions_mod_confirmed || [];
+  if (!divs.length) { alert('No confirmed moderated divisions found'); return; }
+  var btn = document.getElementById('btnScanModDivisions');
+  var origText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Queuing ' + divs.length + ' scans...';
+  var queued = 0;
+  for (var i = 0; i < divs.length; i++) {
+    var d = divs[i];
+    try {
+      var resp = await fetch(API_BASE + '/api/scan', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ group_id: d.id, include_allies: false, include_enemies: false })
+      });
+      var data = await resp.json().catch(function() { return {}; });
+      if (resp.ok) {
+        queued++;
+        _pendingQueueId = data.queue_id;
+      } else {
+        console.warn('Failed to queue scan for ' + (d.name || d.id) + ': ' + (data.error || 'Unknown error'));
+      }
+    } catch(e) {
+      console.warn('Network error queuing scan for ' + (d.name || d.id));
+    }
+  }
+  btn.disabled = false; btn.textContent = origText;
+  if (queued > 0) {
+    alert('Queued ' + queued + ' scan(s) for your moderated divisions.');
+    // start polling for progress or queue
+    document.getElementById('queueStatus').style.display = 'block';
+    document.getElementById('queuePosition').textContent = 'Queued ' + queued + ' scan(s)';
+    _startQueuePolling();
+  } else {
+    alert('Failed to queue any scans.');
+  }
 }
 
 async function _doScan(groupId, includeAllies, includeEnemies, btn, origText) {
@@ -162,6 +202,8 @@ async function _doScan(groupId, includeAllies, includeEnemies, btn, origText) {
       return;
     }
     _pendingQueueId = data.queue_id;
+    // always re-enable scan buttons so users can queue more scans
+    btn.disabled = false; btn.textContent = origText;
     if (data.position && data.position > 1) {
       // show queue position
       document.getElementById('queueStatus').style.display = 'block';
@@ -216,7 +258,16 @@ async function cancelScan() {
   if (!confirm('Cancel the running scan?')) return;
   var btn = document.getElementById('btnCancel');
   btn.disabled = true; btn.textContent = 'Cancelling...';
-  try { await fetch(API_BASE + '/api/scan/cancel', { method: 'POST' }); } catch(e) {}
+  try {
+    var resp = await fetch(API_BASE + '/api/scan/cancel', { method: 'POST' });
+    var data = await resp.json().catch(function() { return {}; });
+    if (!resp.ok) {
+      alert(data.error || 'Failed to cancel scan');
+      btn.disabled = false; btn.textContent = '✕ Cancel Scan';
+    }
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '✕ Cancel Scan';
+  }
 }
 
 // ──────────────────── Toggle custom scan ────────────────────
@@ -292,6 +343,11 @@ function startProgressStream() {
         if (d.status === 'done' && d.scan_id) loadScanResults(d.scan_id);
         if (d.status === 'error') alert('Scan failed: ' + (d.phase_description || 'Unknown error'));
         if (d.status === 'cancelled') alert('Scan was cancelled.');
+      }
+
+      if (cancelBtn) {
+        if (d.owned_by_current_user) cancelBtn.style.display = 'inline-flex';
+        else cancelBtn.style.display = 'none';
       }
     } catch (e) {}
   }, 1500);
@@ -962,10 +1018,7 @@ async function init() {
     if (!state) return;
     if (state.status === 'scanning') {
       document.getElementById('scanProgress').style.display = 'block';
-      document.getElementById('btnScan').disabled = true;
-      document.getElementById('btnScan').textContent = 'Scan in Progress';
-      document.getElementById('btnScanSEA').disabled = true;
-      document.getElementById('btnScanSEA').textContent = 'Scan in Progress...';
+      // don't disable scan buttons — users can still queue more scans
       startProgressStream();
     } else if (state.status === 'done' && state.scan_id) {
       loadScanResults(state.scan_id);
@@ -976,7 +1029,12 @@ async function init() {
     var resp2 = await fetch(API_BASE + '/api/scans');
     var scans = await resp2.json().catch(function() { return []; });
     if (scans && scans.length > 0 && !currentScanData) {
-      loadScanResults(scans[0].id);
+      // prefer the most recent "SEA Military" (group 2648601 with allies) scan as default
+      var seaScan = scans.find(function(s) {
+        return s.primary_group_id === 2648601 && s.include_allies;
+      });
+      var defaultScan = seaScan || scans[0];
+      loadScanResults(defaultScan.id);
     }
   } catch(e) {}
 }

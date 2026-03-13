@@ -62,8 +62,17 @@ def start_scan():
 @scan_bp.route("/api/progress")
 @login_required
 def api_progress():
+    user = get_current_user()
     cursor = request.args.get("cursor", 0, type=int)
-    return jsonify(scan_progress.to_dict(log_cursor=cursor))
+    data = scan_progress.to_dict(log_cursor=cursor)
+    # tell the frontend whether the current user can cancel this scan
+    if user:
+        data["owned_by_current_user"] = (
+            user["is_admin"] or scan_progress.requested_by == user["username"]
+        )
+    else:
+        data["owned_by_current_user"] = False
+    return jsonify(data)
 
 
 @scan_bp.route("/api/scan/cancel", methods=["POST"])
@@ -74,8 +83,8 @@ def cancel_scan():
         return jsonify({"error": "No scan running"}), 400
     # only admin or the user who started the scan can cancel
     if not user["is_admin"]:
-        # for now, allow anyone to cancel (the queue system handles fairness)
-        pass
+        if scan_progress.requested_by != user["username"]:
+            return jsonify({"error": "Only the person who started this scan (or an admin) can cancel it"}), 403
     scan_progress.cancel()
     return jsonify({"ok": True, "message": "Cancellation requested"})
 
@@ -143,14 +152,15 @@ def api_set_user_status():
     if status not in VALID_STATUSES:
         return jsonify({"error": f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}"}), 400
 
-    # permission check for status changes
+    # permission check for status changes — admin, confirmed DA, or SEA Moderator
     is_div_admin = _has_role(user, "Division Administrator") and user["admin_confirmed"]
-    if not user["is_admin"] and not is_div_admin:
-        return jsonify({"error": "Only confirmed Division Administrators and admins can set user statuses"}), 403
+    is_sea_mod = _has_role(user, "SEA Moderator")
+    if not user["is_admin"] and not is_div_admin and not is_sea_mod:
+        return jsonify({"error": "Only admins, confirmed Division Administrators, and SEA Moderators can set user statuses"}), 403
 
     # only admin and confirmed div admins can set internal statuses
-    if status in ("Suspicious", "Under Investigation") and not user["is_admin"] and not is_div_admin:
-        return jsonify({"error": "Only Division Administrators can set this status"}), 403
+    if status in ("Suspicious", "Under Investigation") and not user["is_admin"] and not is_div_admin and not is_sea_mod:
+        return jsonify({"error": "Only Division Administrators and SEA Moderators can set this status"}), 403
 
     ok = set_user_status(roblox_id, status, user["username"], discord_ids)
     if not ok:
@@ -173,9 +183,10 @@ def api_get_user_statuses(scan_id):
     roblox_ids = [str(uid) for uid in (scan_data.get("users") or {}).keys()]
     statuses = get_user_statuses_for_scan(roblox_ids)
 
-    # non-admin, non-div-admin users only see public statuses
+    # non-admin, non-div-admin, non-SEA-mod users only see public statuses
     is_div_admin = _has_role(user, "Division Administrator") and user["admin_confirmed"]
-    if not user["is_admin"] and not is_div_admin:
+    is_sea_mod = _has_role(user, "SEA Moderator")
+    if not user["is_admin"] and not is_div_admin and not is_sea_mod:
         statuses = {k: v for k, v in statuses.items() if v["status"] in PUBLIC_STATUSES}
 
     return jsonify(statuses)

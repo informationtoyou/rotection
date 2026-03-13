@@ -50,6 +50,7 @@ def _queue_loop():
             mark_queue_running(queue_id)
             scan_progress.reset()
             scan_progress.status = "scanning"
+            scan_progress.requested_by = entry["requested_by"]
 
             # run the scan directly (blocks this thread)
             try:
