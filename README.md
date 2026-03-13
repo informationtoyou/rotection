@@ -2,7 +2,7 @@
 
 Scans SEA Military (and its affiliates, so everyone!) or its divisions, or ANY other group using [Rotector's](https://rotector.com) convenient [API](https://roscoe.rotector.com), resolves their Discord and Roblox accounts, and gives you a list of Discord IDs to massban!
 
-This comes with a web dashboard and a CLI. Web verison has live progress, charts, statistic, and export options.
+This comes with a web dashboard and a CLI. Web version has live progress, charts, statistic, and export options.
 
 ## What does this do?
 
@@ -16,7 +16,7 @@ This comes with a web dashboard and a CLI. Web verison has live progress, charts
 
 The web dashboard shows all of this in real time with an ETA, and lets you filter/sort/export the results after. It is highly recommended if you are not a developer to use the web dashboard.
 
-You can find the site hosting this [here](https://rotection.pythonanywhere.com). It is **locked** by password to avoid clankers (exception: ThatOneClankerr as he also happens to be a clanker but not *that* type). If you are SEA Staff, a DL, or someone that's interested, feel free to DM me for credentials (@infoflexy).
+You can find the site hosting this [here](https://rotection.pythonanywhere.com). It is **locked** by an account authentication to avoid clankers (exception: ThatOneClankerr as he also happens to be a clanker but not *that* type). Make an account there!
 
 ## Self-hosting for the cool kids
 
@@ -37,9 +37,12 @@ Optionally, create a `.env` file in the project root:
 
 ```
 API_KEY_HEADER=your_rotector_api_key_here
+ADMIN_SECRET=whatever_admin_password_you_want
 ```
 
 You get the API key from Rotector. Without it, the scanner can't fetch flag data. Rotector API keys are not available to the public at the moment without contacting the owner of Rotector. The owner of Rotector was kind enough to give me one, which is being used at https://rotection.pythonanywhere.com/.
+
+Admin's username is `admin`.
 
 ## Hey, I wanna help!
 
@@ -145,7 +148,7 @@ Do whatever the hell you want with this as long as you:
 - Do not use it to evade bans from Rule 1, 11, 14, 19 in SEA.
 
 ## help is this a virus
-no lmao plz scan on virustotal if this being open-source is not already enough for you
+no lmao plz scan on virustotal if this being open-source is not already enough for you, ask someone to review for you, ask AI, anything basically
 
 ## Final Notes
 ofc to anyone who criticises this, as Poppe once rightfully said:

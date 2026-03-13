@@ -530,6 +530,14 @@ tr:hover td { background: rgba(99,102,241,.04); }
 .div-confirm-chip.confirmed { border-color: var(--green); color: var(--green); }
 .div-confirm-chip.pending { border-color: var(--yellow); color: var(--yellow); }
 
+/* HR/HC rank tag */
+.hrhc-tag {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 9px; font-weight: 700; vertical-align: middle;
+  background: rgba(245,158,11,.15); color: var(--yellow);
+  border: 1px solid rgba(245,158,11,.3); letter-spacing: .3px;
+}
+
 @media (max-width: 768px) {
   .header { flex-direction: column; align-items: flex-start; padding: 14px 16px; }
   .main { padding: 16px; }

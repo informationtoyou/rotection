@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from scanner.constants import (
     ROBLOX_GROUPS_API, ROBLOX_USERS_API, ROBLOX_THUMBNAILS_API, WORKER_THREADS,
+    SEA_MILITARY_GROUP_ID, SEA_HRHC_RANKS,
 )
 from scanner.http import roblox_get, roblox_post
 
@@ -96,3 +97,49 @@ def get_user_thumbnail(user_id: int) -> str | None:
     if data and data.get("data"):
         return data["data"][0].get("imageUrl")
     return None
+
+
+def get_sea_hrhc_user_ids(log=print) -> set:
+    """Fetch all user IDs that hold an HR/HC rank in SEA Military.
+    Uses the roles endpoint: 1 call for roles list + 1 call per matching role.
+    Typically ≤7 API calls total."""
+    hrhc_ids = set()
+    roles_data = roblox_get(f"{ROBLOX_GROUPS_API}/v1/groups/{SEA_MILITARY_GROUP_ID}/roles")
+    if not roles_data or "roles" not in roles_data:
+        log("  ⚠ Could not fetch SEA Military roles")
+        return hrhc_ids
+
+    matching_roles = []
+    for role in roles_data["roles"]:
+        role_name = role.get("name", "")
+        if role_name in SEA_HRHC_RANKS:
+            matching_roles.append(role)
+
+    if not matching_roles:
+        log("  No HR/HC roles found in SEA Military role list")
+        return hrhc_ids
+
+    log(f"  Found {len(matching_roles)} HR/HC roles to check: {', '.join(r['name'] for r in matching_roles)}")
+
+    for role in matching_roles:
+        role_id = role["id"]
+        role_name = role["name"]
+        cursor = None
+        while True:
+            params = {"limit": 100, "sortOrder": "Asc"}
+            if cursor:
+                params["cursor"] = cursor
+            data = roblox_get(
+                f"{ROBLOX_GROUPS_API}/v1/groups/{SEA_MILITARY_GROUP_ID}/roles/{role_id}/users",
+                params,
+            )
+            if not data:
+                break
+            for u in data.get("data", []):
+                hrhc_ids.add(u["userId"])
+            cursor = data.get("nextPageCursor")
+            if not cursor:
+                break
+        log(f"    {role_name}: found members (total HR/HC so far: {len(hrhc_ids)})")
+
+    return hrhc_ids

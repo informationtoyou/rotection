@@ -471,6 +471,8 @@ function renderResults() {
   html += '<span id="confMinVal" class="filter-label" style="min-width:30px">0%</span></div>';
   html += '<label class="filter-check-label"><input type="checkbox" id="filterActionable" onchange="applyFilters()" class="accent-check"> Actionable only</label>';
   html += '<label class="filter-check-label"><input type="checkbox" id="filterHasDiscord" onchange="applyFilters()" class="accent-check"> Has Discord</label>';
+  html += '<label class="filter-check-label"><input type="checkbox" id="filterHRHC" onchange="applyFilters()" class="accent-check"> HR/HC Only</label>';
+  html += '<label class="filter-check-label"><input type="checkbox" id="filterExcludeHRHC" onchange="applyFilters()" class="accent-check"> Exclude HR/HC</label>';
   html += '</div><div class="filter-summary" id="filterSummary"></div></div>';
 
   html += '<div class="card"><h2>Users <span id="resultCount" class="result-count"></span></h2>';
@@ -507,6 +509,8 @@ function applyFilters() {
   var confMin = parseInt(document.getElementById('filterConfMin') ? document.getElementById('filterConfMin').value : '0');
   var actionable = document.getElementById('filterActionable') ? document.getElementById('filterActionable').checked : false;
   var hasDiscord = document.getElementById('filterHasDiscord') ? document.getElementById('filterHasDiscord').checked : false;
+  var hrhcOnly = document.getElementById('filterHRHC') ? document.getElementById('filterHRHC').checked : false;
+  var excludeHrhc = document.getElementById('filterExcludeHRHC') ? document.getElementById('filterExcludeHRHC').checked : false;
 
   filteredUsers = allUsers.filter(function(u) {
     if (search && !(u.name||'').toLowerCase().includes(search) && !String(u.id).includes(search) && !(u.displayName||'').toLowerCase().includes(search)) return false;
@@ -516,6 +520,8 @@ function applyFilters() {
     if (conf < confMin) return false;
     if (actionable && !u.actionable) return false;
     if (hasDiscord && (!u.discord_accounts || u.discord_accounts.length === 0)) return false;
+    if (hrhcOnly && !u.is_sea_hrhc) return false;
+    if (excludeHrhc && u.is_sea_hrhc) return false;
     if (statusFilter) {
       var st = currentScanStatuses[String(u.id)];
       var uStatus = st ? st.status : 'Pending Review';
@@ -577,7 +583,7 @@ function renderPage() {
     var stCss = STATUS_CSS[uStatus] || 'ust-pending-review';
 
     html += '<tr>';
-    html += '<td>' + (thumb ? '<img class="avatar" src="' + thumb + '" loading="lazy" onerror="this.style.display=\'none\'">' : '') + '<strong>' + esc(u.name) + '</strong><br><span class="text-muted text-xs">' + esc(u.displayName||'') + ' · ' + u.id + '</span></td>';
+    html += '<td>' + (thumb ? '<img class="avatar" src="' + thumb + '" loading="lazy" onerror="this.style.display=\'none\'">' : '') + '<strong>' + esc(u.name) + '</strong>' + (u.is_sea_hrhc ? ' <span class="hrhc-tag">HR/HC</span>' : '') + '<br><span class="text-muted text-xs">' + esc(u.displayName||'') + ' · ' + u.id + '</span></td>';
     html += '<td><span class="flag-badge" style="background:' + ft.color + '">' + ft.name + '</span></td>';
     html += '<td><div class="confidence-bar"><div class="confidence-fill" style="width:' + conf + '%;background:' + confColor + '"></div></div>' + conf + '%</td>';
     html += '<td class="text-xs">' + esc(u.group_name||'?') + '</td>';

@@ -8,11 +8,12 @@ import traceback
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from scanner.constants import FLAG_TYPES, FLAGGED_FILE, WORKER_THREADS
+from scanner.constants import FLAG_TYPES, FLAGGED_FILE, WORKER_THREADS, SEA_MILITARY_GROUP_ID
 from scanner.progress import scan_progress
 from scanner.cache import load_cache, save_cache
 from scanner.roblox import (
     get_group_info, get_allied_groups, get_enemy_groups, batch_get_user_info,
+    get_sea_hrhc_user_ids,
 )
 from scanner.rotector import (
     get_tracked_users_for_group, batch_lookup_users, get_discord_ids_for_user,
@@ -177,6 +178,28 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
 
         p.users_total = len(all_user_records)
         p.log(f"Total unique tracked users: {len(all_user_records)}")
+
+        # ---- phase 2.4: tag SEA Military HR/HC users (~7 API calls, very fast) ----
+        scanning_sea = any(g["id"] == SEA_MILITARY_GROUP_ID for g in groups_to_scan)
+        if scanning_sea:
+            p.log("Tagging SEA Military HR/HC ranks...")
+            try:
+                hrhc_ids = get_sea_hrhc_user_ids(log=p.log)
+                tagged = 0
+                for uid_str, rec in all_user_records.items():
+                    if int(uid_str) in hrhc_ids:
+                        rec["is_sea_hrhc"] = True
+                        tagged += 1
+                    else:
+                        rec["is_sea_hrhc"] = False
+                p.log(f"  Tagged {tagged} users as SEA HR/HC")
+            except Exception as exc:
+                p.log(f"  ⚠ HR/HC tagging failed (non-fatal): {exc}")
+                for rec in all_user_records.values():
+                    rec["is_sea_hrhc"] = False
+        else:
+            for rec in all_user_records.values():
+                rec["is_sea_hrhc"] = False
 
         # ---- phase 2.5: fill in ALL missing usernames from Roblox ----
         missing_names = [int(uid) for uid, rec in all_user_records.items()
