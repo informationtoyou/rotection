@@ -22,6 +22,11 @@
   </div>
   <div class="header-right">
     <span id="statusBadge" class="status-badge">⬤ Idle</span>
+    <div class="user-badge" id="userBadge" style="display:none">
+      <span class="user-name" id="userName"></span>
+      <span class="user-roles" id="userRoles"></span>
+      <button class="btn btn-secondary btn-sm" onclick="doLogout()">Logout</button>
+    </div>
   </div>
 </div>
 
@@ -31,6 +36,8 @@
   <div class="tab" data-tab="stats">Statistics</div>
   <div class="tab" data-tab="history">History</div>
   <div class="tab" data-tab="discord">Discord IDs</div>
+  <div class="tab" data-tab="queue">Queue</div>
+  <div class="tab" data-tab="admin" id="adminTab" style="display:none">Admin</div>
 </div>
 
 <div class="main">
@@ -42,6 +49,12 @@
     <span class="deploy-scanning" id="deployScanNote" style="display:none">
       — A scan is in progress, the update will apply once it finishes.
     </span>
+  </div>
+
+  <!-- PENDING CONFIRMATION BANNER -->
+  <div class="pending-banner" id="pendingBanner" style="display:none">
+    <span>⏳</span>
+    <span id="pendingMessage">Your account is pending admin confirmation. Some features may be restricted.</span>
   </div>
 
   <!-- SCANNER -->
@@ -62,6 +75,14 @@
       <p class="scan-hint">
         "Scan all of SEA" scans <strong>SEA Military</strong> (2648601) + all official divisions.
       </p>
+
+      <!-- DIVISION QUICK SCAN (for division leaders/mods) -->
+      <div id="divisionQuickScan" style="display:none">
+        <button class="btn btn-secondary" id="btnScanMyDivision" onclick="scanMyDivision()" style="margin-bottom:12px">
+          🎖️ Scan My Division
+        </button>
+      </div>
+
       <div id="customScanSection" class="custom-scan-section">
         <div class="scan-controls">
           <div class="form-group">
@@ -87,6 +108,17 @@
             <label>&nbsp;</label>
             <button class="btn btn-primary" id="btnScan" onclick="startScan()">Start Custom Scan</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUEUE STATUS -->
+    <div id="queueStatus" style="display:none">
+      <div class="card">
+        <h2>⏳ Your Scan is Queued</h2>
+        <div class="queue-info">
+          <div class="queue-position">Position in queue: <strong id="queuePosition">—</strong></div>
+          <p class="text-muted text-xs">Your scan will start automatically when it reaches the front of the queue.</p>
         </div>
       </div>
     </div>
@@ -173,6 +205,27 @@
       <div class="discord-box" id="discordIdBox">No Discord IDs loaded.</div>
     </div>
   </div>
+
+  <!-- QUEUE -->
+  <div class="panel" id="panel-queue">
+    <div class="card">
+      <h2>Scan Queue</h2>
+      <div id="queueList">
+        <div class="empty-state"><div class="icon">📋</div><p>No scans in queue.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN PANEL -->
+  <div class="panel" id="panel-admin">
+    <div class="card">
+      <h2>👥 User Management</h2>
+      <p class="text-muted text-xs" style="margin-bottom:14px">Manage accounts, confirm Division Leaders/Moderators, and change roles.</p>
+      <div id="adminUserList">
+        <div class="empty-state"><div class="icon pulse">⏳</div><p>Loading users...</p></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- USER DETAIL MODAL -->
@@ -181,6 +234,15 @@
     <button class="modal-close" onclick="closeModal()">&times;</button>
     <h3 id="modalTitle">User Details</h3>
     <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ADMIN USER EDIT MODAL -->
+<div class="modal-overlay" id="adminUserModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeAdminModal()">&times;</button>
+    <h3 id="adminModalTitle">Edit User</h3>
+    <div id="adminModalBody"></div>
   </div>
 </div>
 

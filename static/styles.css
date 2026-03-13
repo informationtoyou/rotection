@@ -272,7 +272,7 @@ tr:hover td { background: rgba(99,102,241,.04); }
   background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
   padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
   max-height: 400px; overflow-y: auto; word-break: break-all; line-height: 1.8;
-  color: var(--text2); white-space: pre-wrap;
+  color: var (--text2); white-space: pre-wrap;
 }
 
 /* groups nav panel */
@@ -312,7 +312,7 @@ tr:hover td { background: rgba(99,102,241,.04); }
 }
 .detail-row {
   display: flex; gap: 12px; padding: 7px 0;
-  border-bottom: 1px solid var(--border); font-size: 13px;
+  border-bottom: 1px solid var (--border); font-size: 13px;
 }
 .detail-label { color: var(--text2); min-width: 110px; font-weight: 600; }
 .reason-card {
@@ -413,6 +413,123 @@ tr:hover td { background: rgba(99,102,241,.04); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* user badge in header */
+.user-badge {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px; border-radius: 8px;
+  background: var(--bg3); border: 1px solid var(--border);
+}
+.user-name { font-size: 12px; font-weight: 700; color: var(--accent2); }
+.user-roles { font-size: 10px; color: var(--text2); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* pending confirmation banner */
+.pending-banner {
+  background: rgba(245,158,11,.08);
+  border: 1px solid rgba(245,158,11,.25);
+  border-radius: 10px;
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--yellow);
+}
+
+/* queue panel */
+.queue-info { text-align: center; padding: 14px 0; }
+.queue-position { font-size: 18px; color: var(--accent2); margin-bottom: 6px; }
+.queue-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 14px; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 8px; font-size: 12px;
+}
+.queue-item .qi-pos {
+  font-size: 18px; font-weight: 800; color: var(--accent2);
+  min-width: 36px; text-align: center;
+}
+.queue-item .qi-info { flex: 1; margin-left: 12px; }
+.queue-item .qi-status {
+  padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 700;
+}
+.qi-status-queued { background: rgba(245,158,11,.12); color: var(--yellow); }
+.qi-status-running { background: rgba(34,197,94,.12); color: var(--green); }
+
+/* admin panel */
+.admin-user-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 14px; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 8px; gap: 10px; flex-wrap: wrap;
+}
+.admin-user-row .au-name { font-weight: 700; font-size: 13px; }
+.admin-user-row .au-roles { font-size: 10px; color: var(--text2); }
+.admin-user-row .au-created { font-size: 10px; color: var(--text2); }
+.admin-user-row .au-actions { display: flex; gap: 6px; align-items: center; }
+.admin-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 9px; font-weight: 700;
+}
+.admin-badge-confirmed { background: rgba(34,197,94,.12); color: var (--green); border: 1px solid rgba(34,197,94,.3); }
+.admin-badge-pending { background: rgba(245,158,11,.12); color: var(--yellow); border: 1px solid rgba(245,158,11,.3); }
+.admin-badge-admin { background: rgba(99,102,241,.12); color: var(--accent2); border: 1px solid rgba(99,102,241,.3); }
+
+/* admin modal form */
+.admin-form-group { margin-bottom: 14px; }
+.admin-form-group label { display: block; font-size: 11px; color: var(--text2); font-weight: 600; margin-bottom: 4px; text-transform: uppercase; }
+.admin-form-group select { width: 100%; }
+.admin-role-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-role-chip {
+  padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 11px; cursor: pointer; background: var(--bg3); color: var(--text2);
+  user-select: none; transition: all .15s;
+}
+.admin-role-chip:hover { border-color: var(--accent); }
+.admin-role-chip.selected { border-color: var(--accent); background: rgba(99,102,241,.15); color: var(--accent2); }
+.admin-confirm-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 8px;
+}
+.admin-confirm-label { font-size: 12px; }
+.admin-toggle {
+  width: 40px; height: 22px; border-radius: 11px; border: none;
+  cursor: pointer; position: relative; transition: background .2s;
+}
+.admin-toggle.on { background: var(--green); }
+.admin-toggle.off { background: var(--bg4); border: 1px solid var(--border); }
+.admin-toggle::after {
+  content: ''; position: absolute; top: 2px;
+  width: 18px; height: 18px; border-radius: 50%; background: #fff;
+  transition: left .2s;
+}
+.admin-toggle.on::after { left: 20px; }
+.admin-toggle.off::after { left: 2px; }
+
+/* user status badges in results */
+.status-select {
+  padding: 4px 8px; border-radius: 6px; font-size: 10px;
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+  cursor: pointer;
+}
+.user-status-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 10px; font-weight: 600;
+}
+.ust-sea-banned { background: rgba(220,38,38,.15); color: var(--red); border: 1px solid rgba(220,38,38,.3); }
+.ust-false-positive { background: rgba(34,197,94,.12); color: var(--green); border: 1px solid rgba(34,197,94,.3); }
+.ust-suspicious { background: rgba(245,158,11,.12); color: var(--yellow); border: 1px solid rgba(245,158,11,.3); }
+.ust-under-investigation { background: rgba(99,102,241,.12); color: var(--accent2); border: 1px solid rgba(99,102,241,.3); }
+.ust-pending-review { background: var(--bg4); color: var(--text2); border: 1px solid var(--border); }
+
+/* division mod confirmed chips */
+.div-confirm-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 6px; font-size: 10px; margin: 2px;
+  background: var(--bg); border: 1px solid var(--border);
+}
+.div-confirm-chip.confirmed { border-color: var(--green); color: var(--green); }
+.div-confirm-chip.pending { border-color: var(--yellow); color: var(--yellow); }
+
 @media (max-width: 768px) {
   .header { flex-direction: column; align-items: flex-start; padding: 14px 16px; }
   .main { padding: 16px; }
@@ -420,4 +537,6 @@ tr:hover td { background: rgba(99,102,241,.04); }
   .scan-controls { flex-direction: column; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .chart-grid { grid-template-columns: 1fr; }
+  .user-badge { flex-wrap: wrap; }
+  .admin-user-row { flex-direction: column; align-items: flex-start; }
 }

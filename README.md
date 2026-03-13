@@ -77,12 +77,17 @@ Rotection/
 ├── bot.py                  — CLI interface (no web server needed)
 ├── requirements.txt        — Python dependencies
 ├── app/
-│   ├── __init__.py         — Flask app factory (create_app)
+│   ├── __init__.py         — Flask app factory (create_app), session config, DB + affiliates init
+│   ├── affiliates.py       — Fetches & caches SEA Military allies/enemies from the Roblox API
+│   ├── database.py         — SQLite database (users, scan queue, user statuses)
 │   ├── deploy_state.py     — Thread-safe deploy banner state management
+│   ├── queue_worker.py     — Background thread that processes queued scans one at a time
 │   └── routes/
 │       ├── __init__.py     — Registers all blueprints
-│       ├── pages.py        — GET / (serves the dashboard HTML)
-│       ├── scan.py         — /api/scan, /api/progress, /api/scan/cancel, /api/flag-types
+│       ├── auth.py         — Login, signup, logout, session, login_required/admin_required
+│       ├── admin.py        — Admin panel: confirm users, change roles, delete accounts
+│       ├── pages.py        — GET / (dashboard), /login, /signup
+│       ├── scan.py         — /api/scan, /api/progress, /api/queue, /api/user-status
 │       ├── scans.py        — /api/scans, /api/scans/<id>, /api/scans/<id>/discord-export
 │       └── deploy.py       — /api/deploy/notify, /api/deploy/status
 ├── scanner/
@@ -99,11 +104,15 @@ Rotection/
 │   ├── script.js           — Frontend logic (vanilla JS + Chart.js)
 │   └── styles.css          — Dashboard styles
 ├── templates/
-│   └── index.html          — Single-page dashboard
+│   ├── index.html          — Single-page dashboard (requires login)
+│   ├── login.html          — Login page
+│   └── signup.html         — Signup page with role/division selection
 ├── .env                    — API keys (gitignored)
-├── scan_cache.json         — Saved scan results (auto-generated)
-└── flagged.txt             — Space-separated Discord IDs from last scan (auto-generated)
+├── rotection.db            — SQLite database (auto-generated, gitignored)
+├── scan_cache.json         — Saved scan results (auto-generated, gitignored)
+└── flagged.txt             — Space-separated Discord IDs from last scan (auto-generated, gitignored)
 ```
+
 ## Features
 
 - **Threaded scanning**: Discord ID lookups run in parallel (20 threads by default) so scans finish way faster. 20 is the limit for those who do not have an API Key, if you do, 50 threads is the maximum as 500 requests / 10 seconds are allowed.

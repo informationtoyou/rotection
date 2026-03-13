@@ -1,10 +1,24 @@
+# environment + secrets
 .env
 .venv/
+venv/
+
+# python caches
 __pycache__/
+*.pyc
+*.pyo
+
+# generated data
 scan_cache.json
 flagged.txt
-*.pyc
+rotection.db
+*.db-journal
+*.db-wal
+
+# random os junk
+*.DS_Store
+.DS_Store
+
+# miscellaneous junk
 *.zip
-*.DS_Store"
-"Rotector API 1.json"
-*.gitignore
+Rotector API 1.json

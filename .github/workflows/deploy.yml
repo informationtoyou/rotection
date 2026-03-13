@@ -64,9 +64,19 @@ jobs:
           "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
           -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
           -H "Content-Type: application/json" \
-          -d '{"input":"git pull origin main\n"}'
+          -d '{"input":"cd ~/Rotection && git pull origin main\n"}'
         echo "Sent git pull. Waiting 10s..."
         sleep 10
+
+    - name: Install dependencies
+      run: |
+        curl -s -X POST \
+          "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
+          -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d '{"input":"pip install -r ~/Rotection/requirements.txt 2>&1 | tail -5\n"}'
+        echo "Sent pip install. Waiting 15s..."
+        sleep 15
 
     - name: Reload web app
       run: |

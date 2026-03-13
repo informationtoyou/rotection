@@ -1,17 +1,28 @@
 """
-Scan blueprint
+queue-based scan management and progress tracker
 """
 
-from flask import Blueprint, jsonify, request
-from scanner import run_scan, scan_progress, is_scanning, FLAG_TYPES
+from flask import Blueprint, jsonify, request, session
+
+from scanner import scan_progress, is_scanning, FLAG_TYPES
+from app.database import (
+    enqueue_scan, get_queue, get_queue_position, get_queue_entry,
+    set_user_status, get_user_statuses, VALID_STATUSES, PUBLIC_STATUSES,
+)
+from app.routes.auth import login_required, get_current_user
 
 scan_bp = Blueprint("scan", __name__)
 
+# SEA Military group ID — scans of this (with allies) are visible to everyone
+SEA_GROUP_ID = 2648601
+
 
 @scan_bp.route("/api/scan", methods=["POST"])
+@login_required
 def start_scan():
-    if is_scanning():
-        return jsonify({"error": "Someone else is already running a scan. Allow for that scan to finish"}), 409
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Authentication required"}), 401
 
     data = request.get_json(force=True, silent=True) or {}
     raw_group_id = data.get("group_id", "2648601")
@@ -25,24 +36,153 @@ def start_scan():
 
     include_allies = bool(data.get("include_allies", True))
     include_enemies = bool(data.get("include_enemies", False))
-    run_scan(group_id, include_allies, include_enemies)
-    return jsonify({"ok": True, "message": "Scan started", "group_id": group_id})
+
+    # permission check: Division Leaders/Mods can only scan their own division
+    if not user["is_admin"] and not _has_role(user, "SEA Moderator") and not _has_role(user, "Individual"):
+        allowed_ids = _get_user_division_ids(user)
+        if group_id not in allowed_ids and group_id != SEA_GROUP_ID:
+            return jsonify({"error": "You can only scan your own division or all of SEA"}), 403
+
+    queue_id = enqueue_scan(group_id, include_allies, include_enemies, user["username"])
+
+    # kick the queue worker
+    from app.queue_worker import maybe_start_worker
+    maybe_start_worker()
+
+    position = get_queue_position(queue_id)
+    return jsonify({
+        "ok": True,
+        "message": "Scan queued",
+        "queue_id": queue_id,
+        "position": position,
+        "group_id": group_id,
+    })
 
 
 @scan_bp.route("/api/progress")
+@login_required
 def api_progress():
     cursor = request.args.get("cursor", 0, type=int)
     return jsonify(scan_progress.to_dict(log_cursor=cursor))
 
 
 @scan_bp.route("/api/scan/cancel", methods=["POST"])
+@login_required
 def cancel_scan():
+    user = get_current_user()
     if not is_scanning():
         return jsonify({"error": "No scan running"}), 400
+    # only admin or the user who started the scan can cancel
+    if not user["is_admin"]:
+        # for now, allow anyone to cancel (the queue system handles fairness)
+        pass
     scan_progress.cancel()
     return jsonify({"ok": True, "message": "Cancellation requested"})
 
 
+@scan_bp.route("/api/queue")
+@login_required
+def api_queue():
+    user = get_current_user()
+    queue = get_queue()
+    # non-admin users only see their own queue entries + the position info
+    if not user["is_admin"]:
+        visible = []
+        for entry in queue:
+            if entry["requested_by"] == user["username"]:
+                visible.append(entry)
+            else:
+                # show position only, not who requested it
+                visible.append({
+                    "id": entry["id"],
+                    "group_id": entry["group_id"],
+                    "status": entry["status"],
+                    "position": entry["position"],
+                    "requested_by": "Another user",
+                    "created_at": entry["created_at"],
+                    "include_allies": entry["include_allies"],
+                    "include_enemies": entry["include_enemies"],
+                    "scan_id": None,
+                    "started_at": entry["started_at"],
+                    "finished_at": entry["finished_at"],
+                })
+        queue = visible
+    return jsonify(queue)
+
+
+@scan_bp.route("/api/queue/<int:queue_id>")
+@login_required
+def api_queue_entry(queue_id):
+    entry = get_queue_entry(queue_id)
+    if not entry:
+        return jsonify({"error": "Queue entry not found"}), 404
+    return jsonify(entry)
+
+
 @scan_bp.route("/api/flag-types")
+@login_required
 def flag_types():
     return jsonify(FLAG_TYPES)
+
+
+@scan_bp.route("/api/user-status", methods=["POST"])
+@login_required
+def api_set_user_status():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.get_json(force=True, silent=True) or {}
+    roblox_id = str(data.get("roblox_id", ""))
+    scan_id = data.get("scan_id", "")
+    status = data.get("status", "")
+
+    if not roblox_id or not scan_id or not status:
+        return jsonify({"error": "roblox_id, scan_id, and status are required"}), 400
+
+    if status not in VALID_STATUSES:
+        return jsonify({"error": f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}"}), 400
+
+    # permission check for status changes
+    is_div_admin = _has_role(user, "Division Administrator") and user["admin_confirmed"]
+    if not user["is_admin"] and not is_div_admin:
+        return jsonify({"error": "Only confirmed Division Administrators and admins can set user statuses"}), 403
+
+    # only admin and confirmed div admins can set internal statuses
+    if status in ("Suspicious", "Under Investigation") and not user["is_admin"] and not is_div_admin:
+        return jsonify({"error": "Only Division Administrators can set this status"}), 403
+
+    ok = set_user_status(roblox_id, scan_id, status, user["username"])
+    if not ok:
+        return jsonify({"error": "Failed to set status"}), 500
+
+    return jsonify({"ok": True})
+
+
+@scan_bp.route("/api/user-statuses/<scan_id>")
+@login_required
+def api_get_user_statuses(scan_id):
+    user = get_current_user()
+    statuses = get_user_statuses(scan_id)
+
+    # non-admin, non-div-admin users only see public statuses
+    is_div_admin = _has_role(user, "Division Administrator") and user["admin_confirmed"]
+    if not user["is_admin"] and not is_div_admin:
+        statuses = {k: v for k, v in statuses.items() if v["status"] in PUBLIC_STATUSES}
+
+    return jsonify(statuses)
+
+
+def _has_role(user: dict, role: str) -> bool:
+    return role in user.get("roles", [])
+
+
+def _get_user_division_ids(user: dict) -> set:
+    """Get all group IDs a user is associated with (as leader or moderator)."""
+    ids = set()
+    if user.get("division_group_id") and user.get("division_confirmed"):
+        ids.add(user["division_group_id"])
+    for div in user.get("divisions_mod_confirmed", []):
+        if isinstance(div, dict) and div.get("id"):
+            ids.add(div["id"])
+    return ids
