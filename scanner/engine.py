@@ -326,7 +326,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                     if not rec.get("displayName"):
                         rec["displayName"] = info.get("displayName", "")
 
-        # ---- phase 6: save ----
+        # ---- phase 6: saving ----
         p.set_phase("Saving results", "Writing flagged.txt and updating scan cache")
         p.progress = 97.0
 
