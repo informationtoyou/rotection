@@ -144,6 +144,10 @@ def _filter_scans_for_user(scans: list[dict], user: dict) -> list[dict]:
         if primary_gid == SEA_GROUP_ID and s.get("include_allies"):
             visible.append(s)
             continue
+        # user's own scans
+        if s.get("requested_by") == user["username"]:
+            visible.append(s)
+            continue
         # user's own division scans
         if primary_gid and primary_gid in user_div_ids:
             visible.append(s)

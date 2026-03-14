@@ -11,76 +11,80 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Notify site and wait for scan
-      run: |
-        SITE="https://${{ secrets.PA_USERNAME }}.pythonanywhere.com"
-        KEY="rotection-deploy-key"
+      - name: Notify site and wait for scan
+        run: |
+          SITE="https://${{ secrets.PA_USERNAME }}.pythonanywhere.com"
+          KEY="${{ secrets.DEPLOY_SECRET }}"
 
-        echo "=== Step 1: Check if deploy endpoints exist ==="
-        STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SITE/api/deploy/status")
-        echo "GET /api/deploy/status -> HTTP $STATUS"
+          if [ -z "$KEY" ]; then
+            echo "DEPLOY_SECRET not set. Skipping notify+wait."
+          else
+            echo "=== Step 1: Check if deploy endpoints exist ==="
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SITE/api/deploy/status")
+            echo "GET /api/deploy/status -> HTTP $STATUS"
 
-        if [ "$STATUS" != "200" ]; then
-          echo "Endpoints not live yet (first deploy). Skipping notify+wait."
-          exit 0
-        fi
+            if [ "$STATUS" != "200" ]; then
+              echo "Endpoints not live yet (first deploy). Skipping notify+wait."
+              exit 0
+            fi
 
-        echo "=== Step 2: Notify site ==="
-        NOTIFY=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SITE/api/deploy/notify" \
-          -H "X-Deploy-Secret: $KEY" \
-          -H "Content-Type: application/json" \
-          -d '{"message":"A new update is being deployed. The site will refresh shortly."}')
-        echo "POST /api/deploy/notify -> HTTP $NOTIFY"
+            echo "=== Step 2: Notify site ==="
+            NOTIFY=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SITE/api/deploy/notify" \
+              -H "X-Deploy-Secret: $KEY" \
+              -H "Content-Type: application/json" \
+              -d '{"message":"A new update is being deployed. The site will refresh shortly."}')
+            echo "POST /api/deploy/notify -> HTTP $NOTIFY"
 
-        if [ "$NOTIFY" != "200" ]; then
-          echo "Notify failed. Skipping wait."
-          exit 0
-        fi
+            if [ "$NOTIFY" != "200" ]; then
+              echo "Notify failed. Skipping wait."
+              exit 0
+            fi
 
-        echo "Banner is now visible to users."
+            echo "Banner is now visible to users."
 
-        echo "=== Step 3: Wait for scan to finish ==="
-        while true; do
-          RESP=$(curl -s "$SITE/api/deploy/status" 2>/dev/null || echo "")
-          if [ -z "$RESP" ]; then
-            echo "Site unreachable. Proceeding."
-            break
+            echo "=== Step 3: Wait for scan to finish ==="
+            while true; do
+              RESP=$(curl -s "$SITE/api/deploy/status" 2>/dev/null || echo "")
+              if [ -z "$RESP" ]; then
+                echo "Site unreachable. Proceeding."
+                break
+              fi
+              IS_SCANNING=$(echo "$RESP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('scanning',False))" 2>/dev/null || echo "False")
+              if [ "$IS_SCANNING" != "True" ]; then
+                echo "No scan running. Proceeding."
+                break
+              fi
+              echo "Scan running. Waiting 15s..."
+              sleep 15
+            done
           fi
-          IS_SCANNING=$(echo "$RESP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('scanning',False))" 2>/dev/null || echo "False")
-          if [ "$IS_SCANNING" != "True" ]; then
-            echo "No scan running. Proceeding."
-            break
-          fi
-          echo "Scan running. Waiting 15s..."
+
+      - name: Pull latest code safely
+        run: |
+          curl -s -X POST \
+            "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
+            -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"input":"cd ~/mysite/rotection && git stash --include-untracked && git pull origin main && git stash pop || true\n"}'
+          echo "Sent safe pull command. Waiting 10s..."
+          sleep 10
+
+      - name: Install dependencies
+        run: |
+          curl -s -X POST \
+            "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
+            -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"input":"source ~/.virtualenvs/myvirtualenv/bin/activate && pip install -r ~/mysite/rotection/requirements.txt 2>&1 | tail -5\n"}'
+          echo "Sent pip install (in virtualenv). Waiting 15s..."
           sleep 15
-        done
 
-    - name: Pull latest code
-      run: |
-        curl -s -X POST \
-          "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
-          -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d '{"input":"cd ~/mysite/rotection && git fetch origin main && git reset --hard origin/main\n"}'
-        echo "Sent git fetch + reset. Waiting 10s..."
-        sleep 10
-
-    - name: Install dependencies
-      run: |
-        curl -s -X POST \
-          "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
-          -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d '{"input":"source ~/.virtualenvs/myvirtualenv/bin/activate && pip install -r ~/mysite/rotection/requirements.txt 2>&1 | tail -5\n"}'
-        echo "Sent pip install (in virtualenv). Waiting 15s..."
-        sleep 15
-
-    - name: Reload web app
-      run: |
-        curl -s -X POST \
-          "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/${{ secrets.PA_USERNAME }}.pythonanywhere.com/reload/" \
-          -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}"
-        echo "Reload requested."
+      - name: Reload web app
+        run: |
+          curl -s -X POST \
+            "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/${{ secrets.PA_USERNAME }}.pythonanywhere.com/reload/" \
+            -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}"
+          echo "Reload requested."

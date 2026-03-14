@@ -12,9 +12,17 @@ _deploy_state = {
     "notified_at": None,
 }
 
+# auto-expire the banner after 5 minutes if never explicitly cleared
+_STALE_TIMEOUT = 300
+
 
 def get_deploy_state() -> dict:
     with _deploy_lock:
+        if _deploy_state["pending"] and _deploy_state["notified_at"]:
+            if time.time() - _deploy_state["notified_at"] > _STALE_TIMEOUT:
+                _deploy_state["pending"] = False
+                _deploy_state["message"] = ""
+                _deploy_state["notified_at"] = None
         return dict(_deploy_state)
 
 

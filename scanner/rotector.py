@@ -37,6 +37,8 @@ def get_tracked_users_for_group(group_id: int, log: Callable = print) -> list[di
 def batch_lookup_users(user_ids: list[int], log: Callable = print) -> dict:
     """Batch endpoint — threaded, looks up flag info for up to 100 users per request."""
     results = {}
+    if not user_ids:
+        return results
     chunks = [user_ids[i:i + 100] for i in range(0, len(user_ids), 100)]
     results_lock = threading.Lock()
 

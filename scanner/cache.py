@@ -158,7 +158,7 @@ def get_previous_scans() -> list[dict]:
     rows = conn.execute(
         """SELECT id, timestamp, primary_group_id, primary_group_name,
                   include_allies, include_enemies,
-                  total_flagged, total_discord_ids
+                  total_flagged, total_discord_ids, requested_by
            FROM scans ORDER BY rowid DESC"""
     ).fetchall()
     summaries = []
@@ -169,6 +169,8 @@ def get_previous_scans() -> list[dict]:
             "primary_group": r["primary_group_name"] or "Unknown",
             "primary_group_id": r["primary_group_id"],
             "include_allies": bool(r["include_allies"]),
+            "include_enemies": bool(r["include_enemies"]),
+            "requested_by": r["requested_by"] or "",
             "groups_scanned": 0,  # filled below if needed
             "total_flagged": r["total_flagged"],
             "total_discord_ids": r["total_discord_ids"],
