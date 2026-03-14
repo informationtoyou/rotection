@@ -104,8 +104,16 @@ Rotection/
 │   ├── progress.py         — ScanProgress class + global instance
 │   └── engine.py           — run_scan, is_scanning, background _scan_worker
 ├── static/
-│   ├── script.js           — Frontend logic (vanilla JS + Chart.js)
-│   └── styles.css          — Dashboard styles
+│   ├── styles.css          — Dashboard styles
+│   └── js/
+│       ├── state.js        — Shared globals, constants, utility helpers
+│       ├── auth.js         — Login, logout, loadCurrentUser
+│       ├── scan.js         — Scan controls, queue polling, progress stream, deploy banner
+│       ├── results.js      — Results table, filters, sorting, pagination, user status
+│       ├── stats.js        — Statistics charts (Flag, Group, Confidence)
+│       ├── discord.js      — Discord ID export panel
+│       ├── admin.js        — Admin panel, user detail modal, history, queue
+│       └── main.js         — Tab wiring, modal listeners, init()
 ├── templates/
 │   ├── index.html          — Single-page dashboard (requires login)
 │   ├── login.html          — Login page
