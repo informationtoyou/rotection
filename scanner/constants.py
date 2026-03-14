@@ -21,9 +21,11 @@ FLAGGED_FILE = "flagged.txt"
 
 # -- SEA Military HR/HC ranks --
 SEA_MILITARY_GROUP_ID = 2648601
-SEA_HRHC_RANKS = {
-    "HR1", "HR2", "HR3",
-    "HC1", "HC2", "HC3",
+# Bracket prefixes that indicate HR/HC+ ranks (rank 10+)
+SEA_HRHC_PREFIXES = {
+    "[HR1]", "[HR2]", "[HR3]",
+    "[HC1]", "[HC2]", "[HC3]", "[HC3+]",
+    "[DR]", "[M]", "[L]",
 }
 
 # -- rate limits --

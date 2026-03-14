@@ -10,6 +10,8 @@ __pycache__/
 
 # generated data
 scan_cache.json
+scan_cache.json.migrated
+scan_cache.db
 flagged.txt
 rotection.db
 *.db-journal
@@ -22,3 +24,4 @@ rotection.db
 # miscellaneous junk
 *.zip
 Rotector API 1.json
+*.vscode

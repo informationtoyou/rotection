@@ -12,7 +12,7 @@ This comes with a web dashboard and a CLI. Web version has live progress, charts
 4. Fills in missing usernames from the Roblox API wherever it can
 5. Fetches flag details (type, confidence, reasons)
 6. Resolves linked Discord accounts for each flagged user
-7. Saves everything to `scan_cache.json` and `flagged.txt`
+7. Saves everything to `scan_cache.db` and `flagged.txt`
 
 The web dashboard shows all of this in real time with an ETA, and lets you filter/sort/export the results after. It is highly recommended if you are not a developer to use the web dashboard.
 
@@ -100,19 +100,27 @@ Rotection/
 │   ├── http.py             — Persistent sessions + request helpers (retries, 429 handling)
 │   ├── roblox.py           — Roblox API (groups, allies/enemies, users, thumbnails)
 │   ├── rotector.py         — Rotector API (tracked users, batch lookup, discord IDs)
-│   ├── cache.py            — JSON file cache (load/save/query scan results)
+│   ├── cache.py            — SQLite scan cache (auto-migrates from JSON, load/save/query)
 │   ├── progress.py         — ScanProgress class + global instance
 │   └── engine.py           — run_scan, is_scanning, background _scan_worker
 ├── static/
-│   ├── script.js           — Frontend logic (vanilla JS + Chart.js)
-│   └── styles.css          — Dashboard styles
+│   ├── styles.css          — Dashboard styles
+│   └── js/
+│       ├── state.js        — Shared globals, constants, utility helpers
+│       ├── auth.js         — Login, logout, loadCurrentUser
+│       ├── scan.js         — Scan controls, queue polling, progress stream, deploy banner
+│       ├── results.js      — Results table, filters, sorting, pagination, user status
+│       ├── stats.js        — Statistics charts (Flag, Group, Confidence)
+│       ├── discord.js      — Discord ID export panel
+│       ├── admin.js        — Admin panel, user detail modal, history, queue
+│       └── main.js         — Tab wiring, modal listeners, init()
 ├── templates/
 │   ├── index.html          — Single-page dashboard (requires login)
 │   ├── login.html          — Login page
 │   └── signup.html         — Signup page with role/division selection
 ├── .env                    — API keys (gitignored)
 ├── rotection.db            — SQLite database (auto-generated, gitignored)
-├── scan_cache.json         — Saved scan results (auto-generated, gitignored)
+├── scan_cache.db           — Saved scan results, SQLite (auto-generated, gitignored)
 └── flagged.txt             — Space-separated Discord IDs from last scan (auto-generated, gitignored)
 ```
 
