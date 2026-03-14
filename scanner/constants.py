@@ -5,7 +5,10 @@ Constants and config
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# -- project root (so file paths work on PythonAnywhere WSGI) --
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 API_KEY_HEADER = os.getenv("API_KEY_HEADER")
 
@@ -15,9 +18,9 @@ ROBLOX_GROUPS_API = "https://groups.roblox.com"
 ROBLOX_USERS_API = "https://users.roblox.com"
 ROBLOX_THUMBNAILS_API = "https://thumbnails.roblox.com"
 
-# -- files --
-CACHE_FILE = "scan_cache.json"
-FLAGGED_FILE = "flagged.txt"
+# -- files (absolute paths so they work under any WSGI cwd) --
+CACHE_FILE = os.path.join(PROJECT_ROOT, "scan_cache.json")
+FLAGGED_FILE = os.path.join(PROJECT_ROOT, "flagged.txt")
 
 # -- SEA Military HR/HC ranks --
 SEA_MILITARY_GROUP_ID = 2648601

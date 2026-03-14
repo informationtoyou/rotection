@@ -10,7 +10,7 @@ import time
 import bcrypt
 from contextlib import contextmanager
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "rotection.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "rotection.db")
 
 _local = threading.local()
 

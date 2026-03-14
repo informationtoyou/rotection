@@ -16,8 +16,9 @@ import sqlite3
 import threading
 
 from scanner.constants import CACHE_FILE          # "scan_cache.json"
+from scanner.constants import PROJECT_ROOT
 
-CACHE_DB = "scan_cache.db"
+CACHE_DB = os.path.join(PROJECT_ROOT, "scan_cache.db")
 _local = threading.local()                        # one connection per thread
 
 

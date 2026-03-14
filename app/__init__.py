@@ -8,14 +8,17 @@ from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-load_dotenv()
+# absolute path to project root (works under any WSGI cwd)
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+load_dotenv(os.path.join(_PROJECT_ROOT, ".env"))
 
 
 def create_app() -> Flask:
     app = Flask(
         __name__,
-        template_folder="../templates",
-        static_folder="../static",
+        template_folder=os.path.join(_PROJECT_ROOT, "templates"),
+        static_folder=os.path.join(_PROJECT_ROOT, "static"),
     )
 
     # session config
