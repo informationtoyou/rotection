@@ -1,7 +1,7 @@
 """
 Rotection CLI
 Are you cool (or not) and like using CLIs? Execute this file in a terminal and watch the results return! This will update requirements.txt with Discord IDs of all Discord IDs provided by Rotector.
-The results are recorded to the scan_cache.json, so you can technically view this in the web.
+The results are recorded to the scan_cache.db, so you can technically view this in the web.
 If you are not a developer, or someone who does not know how to use CLIs, I'd recommend using the web-based app.py.
 Instructions for which will be found once you run it.
 """
@@ -89,7 +89,7 @@ def main():
         print(f"  Flagged users: {state['flagged_found']}")
         print(f"  Discord IDs:   {state['discord_ids_found']}")
         print(f"  Scan ID:       {state['scan_id']}")
-        print(f"  Saved to flagged.txt + scan_cache.json")
+        print(f"  Saved to flagged.txt + scan_cache.db")
         print(f"{'=' * 55}")
     else:
         print(f"\n  Scan ended with status: {state['status']}")

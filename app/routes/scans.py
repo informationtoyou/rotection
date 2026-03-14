@@ -5,7 +5,7 @@ Scans handler to list etc
 import json
 from flask import Blueprint, jsonify, request, Response
 
-from scanner import get_previous_scans, get_scan_by_id, load_cache, save_cache
+from scanner import get_previous_scans, get_scan_by_id, delete_scan_by_id
 from app.routes.auth import login_required, get_current_user
 
 scans_bp = Blueprint("scans", __name__)
@@ -29,12 +29,8 @@ def get_or_delete_scan(scan_id):
     if request.method == "DELETE":
         if not user["is_admin"]:
             return jsonify({"error": "Only admin can delete scans"}), 403
-        cache = load_cache()
-        before = len(cache.get("scans", []))
-        cache["scans"] = [s for s in cache.get("scans", []) if s.get("id") != scan_id]
-        if len(cache["scans"]) == before:
+        if not delete_scan_by_id(scan_id):
             return jsonify({"error": "Scan not found"}), 404
-        save_cache(cache)
         return jsonify({"ok": True})
 
     scan = get_scan_by_id(scan_id)

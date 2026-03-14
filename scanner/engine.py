@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from scanner.constants import FLAG_TYPES, FLAGGED_FILE, WORKER_THREADS, SEA_MILITARY_GROUP_ID
 from scanner.progress import scan_progress
-from scanner.cache import load_cache, save_cache
+from scanner.cache import save_scan, find_duplicate_scan
 from scanner.roblox import (
     get_group_info, get_allied_groups, get_enemy_groups, batch_get_user_info,
     get_sea_hrhc_user_ids,
@@ -327,7 +327,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                         rec["displayName"] = info.get("displayName", "")
 
         # ---- phase 6: save ----
-        p.set_phase("Saving results", "Writing flagged.txt and updating scan_cache.json")
+        p.set_phase("Saving results", "Writing flagged.txt and updating scan cache")
         p.progress = 97.0
 
         unique_discord_ids = sorted(all_discord_ids)
@@ -348,23 +348,14 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
             "total_discord_ids": len(unique_discord_ids),
         }
 
-        cache = load_cache()
-        dup_idx = None
-        for i, s in enumerate(cache.get("scans", [])):
-            if (s.get("primary_group_id") == primary_group_id
-                    and s.get("include_allies") == include_allies
-                    and s.get("include_enemies", False) == include_enemies):
-                dup_idx = i
-                break
-        if dup_idx is not None:
-            p.log(f"  Replacing previous scan for this group (was: {cache['scans'][dup_idx].get('id')})")
-            cache["scans"][dup_idx] = scan_result
-        else:
-            cache["scans"].append(scan_result)
+        # remove previous scan for the same group+allies+enemies combo
+        dup_id = find_duplicate_scan(primary_group_id, include_allies, include_enemies)
+        if dup_id and dup_id != scan_id:
+            from scanner.cache import delete_scan_by_id
+            p.log(f"  Replacing previous scan for this group (was: {dup_id})")
+            delete_scan_by_id(dup_id)
 
-        if len(cache["scans"]) > 20:
-            cache["scans"] = cache["scans"][-20:]
-        save_cache(cache)
+        save_scan(scan_result)
 
         elapsed = time.time() - p.start_time if p.start_time else 0
         p.progress = 100.0
@@ -372,7 +363,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         p.eta_seconds = 0
         p.set_phase("Complete", "All done, view Results!")
         p.log(f"Done! {len(all_user_records)} flagged users, {len(unique_discord_ids)} Discord IDs")
-        p.log(f"  Took {elapsed:.1f}s. Results in {FLAGGED_FILE} + scan_cache.json")
+        p.log(f"  Took {elapsed:.1f}s. Results in {FLAGGED_FILE} + scan_cache.db")
 
     except Exception as e:
         p.status = "error"

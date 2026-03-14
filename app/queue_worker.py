@@ -78,12 +78,7 @@ def _queue_loop():
 def _tag_scan_requester(scan_id: str, username: str):
     """Add requested_by field to the cached scan result."""
     try:
-        from scanner.cache import load_cache, save_cache
-        cache = load_cache()
-        for s in cache.get("scans", []):
-            if s.get("id") == scan_id:
-                s["requested_by"] = username
-                break
-        save_cache(cache)
+        from scanner.cache import tag_scan_field
+        tag_scan_field(scan_id, "requested_by", username)
     except Exception:
         pass
