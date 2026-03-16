@@ -6,7 +6,7 @@ import os
 import functools
 from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template
 
-from app.database import create_user, verify_user, get_user
+from app.database import create_user, verify_user, get_user, log_audit
 from app.affiliates import get_sea_affiliates, get_affiliate_ids, is_affiliates_loaded, is_affiliates_loading
 
 auth_bp = Blueprint("auth", __name__)
@@ -152,6 +152,12 @@ def api_signup():
     session.permanent = True
     session["username"] = user["username"]
     session["is_admin"] = user["is_admin"]
+
+    # audit: new signup
+    try:
+        log_audit(user.get('id'), 'user_signed_up', obj=str(user.get('id')))
+    except Exception:
+        pass
     return jsonify({"ok": True, "user": _safe_user(user)})
 
 

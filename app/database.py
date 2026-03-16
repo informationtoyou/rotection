@@ -72,6 +72,19 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_scan_queue_status ON scan_queue(status);
         """)
 
+        # compact audit log for admin actions / important events
+        db.executescript("""
+            CREATE TABLE IF NOT EXISTS audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts INTEGER NOT NULL,
+                actor_id INTEGER,
+                event_type TEXT NOT NULL,
+                obj TEXT,
+                details TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts DESC);
+        """)
+
         # ── migrate user_statuses to global (roblox_id-only primary key) ──
         # check if the old scan_id-based table exists
         old = db.execute(
@@ -228,6 +241,44 @@ def _row_to_user(row) -> dict:
         "is_admin": bool(row["is_admin"]),
         "created_at": row["created_at"],
     }
+
+
+# ──────────────────────── Audit helpers (compact) ───────────────────────
+
+def log_audit(actor_id: int | None, event_type: str, obj: str | None = None, details: str | None = None, max_rows: int = 2000):
+    """Insert a compact audit row. Trims oldest rows beyond max_rows to save space.
+
+    actor_id: users.id or None
+    event_type: short identifier like 'signup','scan_queued','scan_completed','status_set','approved'
+    obj: optional object id (user id, scan id, roblox id)
+    details: optional short JSON/text (kept short)
+    """
+    import time
+    ts = int(time.time())
+    with get_db() as db:
+        # truncate details to keep rows small
+        if details and len(details) > 512:
+            details = details[:512]
+        db.execute("INSERT INTO audit (ts, actor_id, event_type, obj, details) VALUES (?, ?, ?, ?, ?)",
+                   (ts, actor_id, event_type[:32], obj[:128] if obj else None, details))
+        # trim oldest if necessary
+        cnt = db.execute("SELECT COUNT(*) FROM audit").fetchone()[0]
+        if cnt > max_rows:
+            to_del = cnt - max_rows
+            db.execute("DELETE FROM audit WHERE id IN (SELECT id FROM audit ORDER BY ts ASC LIMIT ?)", (to_del,))
+
+
+def get_audit(limit: int = 200, since_ts: int | None = None) -> list[dict]:
+    """Return recent audit rows as dicts (newest first)."""
+    with get_db() as db:
+        if since_ts:
+            rows = db.execute("SELECT id, ts, actor_id, event_type, obj, details FROM audit WHERE ts >= ? ORDER BY ts DESC LIMIT ?", (since_ts, limit)).fetchall()
+        else:
+            rows = db.execute("SELECT id, ts, actor_id, event_type, obj, details FROM audit ORDER BY ts DESC LIMIT ?", (limit)).fetchall()
+    return [
+        {"id": r["id"], "ts": r["ts"], "actor_id": r["actor_id"], "event_type": r["event_type"], "obj": r["obj"], "details": r["details"]}
+        for r in rows
+    ]
 
 
 # ──────────────────────── Scan Queue ────────────────────────

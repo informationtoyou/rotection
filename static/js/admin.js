@@ -264,3 +264,33 @@ async function adminDeleteUser(userId, username) {
     else { var d = await resp.json().catch(function() { return {}; }); alert(d.error || 'Failed to delete'); }
   } catch(e) {}
 }
+
+async function loadAudit(limit = 200) {
+  var el = document.getElementById('adminAuditList');
+  if (!el) return;
+  el.innerHTML = '<div class="empty-state"><div class="icon pulse">⏳</div><p>Loading audit...</p></div>';
+  try {
+    var resp = await fetch(API_BASE + '/api/admin/audit?limit=' + encodeURIComponent(limit));
+    var rows = await resp.json().catch(function() { return []; });
+    if (!rows || !rows.length) { el.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No audit events yet.</p></div>'; return; }
+
+    var html = '<div class="admin-audit-list">';
+    rows.forEach(function(r) {
+      var d = new Date((r.ts || 0) * 1000);
+      var timeStr = isNaN(d.getTime()) ? 'Unknown' : d.toLocaleString();
+      var actor = r.actor_username || (r.actor_id ? ('User ' + r.actor_id) : 'System');
+      var evt = esc(r.event_type || '');
+      var obj = esc(r.obj || '');
+      var details = esc(r.details || '');
+      html += '<div class="audit-row">';
+      html += '<div class="audit-time">' + timeStr + '</div>';
+      html += '<div class="audit-actor">' + actor + '</div>';
+      html += '<div class="audit-evt">' + evt + '</div>';
+      html += '<div class="audit-obj">' + obj + '</div>';
+      html += '<div class="audit-details">' + (details ? details : '') + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) { console.error(e); el.innerHTML = '<div class="empty-state"><div class="icon">🚫</div><p>Error loading audit</p></div>'; }
+}

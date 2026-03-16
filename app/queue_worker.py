@@ -5,13 +5,14 @@ Queueing system for all the scans
 import threading
 import time
 import traceback
+import json
 from datetime import datetime, timezone
 
 from scanner.progress import scan_progress
 from scanner.engine import _scan_worker
 from app.database import (
     get_next_queued, mark_queue_running, mark_queue_done, mark_queue_failed,
-    is_queue_running,
+    is_queue_running, get_user, log_audit,
 )
 
 _worker_thread: threading.Thread | None = None
@@ -52,6 +53,14 @@ def _queue_loop():
             scan_progress.status = "scanning"
             scan_progress.requested_by = entry["requested_by"]
 
+            # audit: record scan start
+            try:
+                actor = get_user(entry.get("requested_by"))
+                actor_id = actor["id"] if actor else None
+                log_audit(actor_id, "scan_started", obj=str(queue_id), details=json.dumps({"group_id": group_id, "include_allies": include_allies, "include_enemies": include_enemies}))
+            except Exception:
+                pass
+
             # run the scan directly (blocks this thread)
             try:
                 _scan_worker(group_id, include_allies, include_enemies)
@@ -60,13 +69,32 @@ def _queue_loop():
                     # store who requested it in the scan cache
                     _tag_scan_requester(scan_progress.scan_id, entry["requested_by"])
                     mark_queue_done(queue_id, scan_progress.scan_id)
+                    # audit: completed
+                    try:
+                        actor = get_user(entry.get("requested_by"))
+                        actor_id = actor["id"] if actor else None
+                        log_audit(actor_id, "scan_completed", obj=scan_progress.scan_id, details=json.dumps({"queue_id": queue_id, "group_id": group_id}))
+                    except Exception:
+                        pass
                 else:
                     mark_queue_failed(queue_id)
+                    try:
+                        actor = get_user(entry.get("requested_by"))
+                        actor_id = actor["id"] if actor else None
+                        log_audit(actor_id, "scan_failed", obj=str(queue_id), details=json.dumps({"queue_id": queue_id, "group_id": group_id}))
+                    except Exception:
+                        pass
             except Exception as e:
                 scan_progress.status = "error"
                 scan_progress.log(f"QUEUE ERROR: {e}")
                 scan_progress.log(traceback.format_exc())
                 mark_queue_failed(queue_id)
+                try:
+                    actor = get_user(entry.get("requested_by"))
+                    actor_id = actor["id"] if actor else None
+                    log_audit(actor_id, "scan_error", obj=str(queue_id), details=str(e)[:512])
+                except Exception:
+                    pass
 
             # brief pause between scans to avoid CPU spike on PythonAnywhere
             time.sleep(2)

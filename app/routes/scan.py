@@ -3,11 +3,12 @@ queue-based scan management and progress tracker
 """
 
 from flask import Blueprint, jsonify, request, session
+import json
 
 from scanner import scan_progress, is_scanning, FLAG_TYPES
 from app.database import (
     enqueue_scan, get_queue, get_queue_position, get_queue_entry,
-    set_user_status, get_user_statuses_for_scan, VALID_STATUSES, PUBLIC_STATUSES,
+    set_user_status, get_user_statuses_for_scan, VALID_STATUSES, PUBLIC_STATUSES, log_audit,
 )
 from app.routes.auth import login_required, get_current_user
 
@@ -48,6 +49,14 @@ def start_scan():
     # kick the queue worker
     from app.queue_worker import maybe_start_worker
     maybe_start_worker()
+
+    # audit: someone queued a scan
+    try:
+        from app.database import get_user_by_id, log_audit, get_user
+        actor_id = user.get("id") if user else None
+        log_audit(actor_id, "scan_queued", obj=str(queue_id), details=json.dumps({"group_id": group_id, "include_allies": include_allies, "include_enemies": include_enemies}))
+    except Exception:
+        pass
 
     position = get_queue_position(queue_id)
     return jsonify({
@@ -165,6 +174,14 @@ def api_set_user_status():
     ok = set_user_status(roblox_id, status, user["username"], discord_ids)
     if not ok:
         return jsonify({"error": "Failed to set status"}), 500
+
+    # audit log
+    try:
+        actor_id = user.get("id") if user else None
+        details = json.dumps({"status": status, "discord_ids": discord_ids if discord_ids else []})
+        log_audit(actor_id, "status_set", obj=roblox_id, details=details)
+    except Exception:
+        pass
 
     return jsonify({"ok": True})
 
