@@ -25,3 +25,6 @@ rotection.db
 *.zip
 Rotector API 1.json
 *.vscode
+*.db
+rotection.db-shm
+rotection.db.corrupt_backup.1773663254

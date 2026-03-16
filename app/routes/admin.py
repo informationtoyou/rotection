@@ -27,16 +27,27 @@ def list_users():
 @admin_required
 def admin_audit():
     # params: limit, since_ts
-    limit = int(request.args.get("limit", 200))
-    since = request.args.get("since_ts")
-    since_ts = int(since) if (since and since.isdigit()) else None
-    rows = get_audit(limit=limit, since_ts=since_ts)
-    # resolve actor usernames cheaply
-    actor_ids = {r["actor_id"] for r in rows if r.get("actor_id")}
-    actors = {aid: (get_user_by_id(aid)["username"] if get_user_by_id(aid) else None) for aid in actor_ids}
-    for r in rows:
-        r["actor_username"] = actors.get(r["actor_id"]) if r.get("actor_id") else None
-    return jsonify(rows)
+    try:
+        limit = int(request.args.get("limit", 200))
+        since = request.args.get("since_ts")
+        since_ts = int(since) if (since and since.isdigit()) else None
+        rows = get_audit(limit=limit, since_ts=since_ts)
+        # resolve actor usernames cheaply
+        actor_ids = {r.get("actor_id") for r in rows if r.get("actor_id") is not None}
+        actors = {}
+        for aid in actor_ids:
+            try:
+                u = get_user_by_id(aid)
+                actors[aid] = (u["username"] if u else None)
+            except Exception:
+                actors[aid] = None
+        for r in rows:
+            r["actor_username"] = actors.get(r.get("actor_id")) if r.get("actor_id") else None
+        return jsonify(rows)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Failed to load audit: " + str(e)}), 500
 
 
 @admin_bp.route("/api/admin/users/<int:user_id>", methods=["PATCH"])

@@ -271,8 +271,14 @@ async function loadAudit(limit = 200) {
   el.innerHTML = '<div class="empty-state"><div class="icon pulse">⏳</div><p>Loading audit...</p></div>';
   try {
     var resp = await fetch(API_BASE + '/api/admin/audit?limit=' + encodeURIComponent(limit));
-    var rows = await resp.json().catch(function() { return []; });
-    if (!rows || !rows.length) { el.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No audit events yet.</p></div>'; return; }
+    var data = await resp.json().catch(function() { return null; });
+    if (!resp.ok) {
+      var msg = (data && data.error) ? data.error : ('HTTP ' + resp.status);
+      el.innerHTML = '<div class="empty-state"><div class="icon">🚫</div><p>Error loading audit: ' + esc(msg) + '</p></div>';
+      return;
+    }
+    var rows = Array.isArray(data) ? data : [];
+    if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No audit events yet.</p></div>'; return; }
 
     var html = '<div class="admin-audit-list">';
     rows.forEach(function(r) {

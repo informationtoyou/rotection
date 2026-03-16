@@ -37,7 +37,51 @@ def get_db():
 
 
 def init_db():
-    """Create tables if they don't exist. Called once on app startup."""
+    """Create tables if they don't exist. Called once on app startup.
+
+    Extra: run an integrity check and if the DB is corrupted, rename it to a backup
+    and continue with a fresh DB so the web app remains operational (useful on PA).
+    """
+    # quick integrity check — if the DB is malformed, move it aside and recreate
+    try:
+        import time as _time, sqlite3 as _sqlite3
+        if os.path.exists(DB_PATH):
+            try:
+                _conn = _sqlite3.connect(DB_PATH, timeout=5)
+                cur = _conn.execute("PRAGMA integrity_check;")
+                res = cur.fetchone()
+                _conn.close()
+                if not res or (isinstance(res, tuple) and res[0] != 'ok') or (isinstance(res, str) and res != 'ok'):
+                    ts = int(_time.time())
+                    corrupt_path = DB_PATH + f'.corrupt_backup.{ts}'
+                    try:
+                        os.rename(DB_PATH, corrupt_path)
+                    except Exception:
+                        # if rename fails, try copying then truncating original
+                        try:
+                            import shutil
+                            shutil.copy2(DB_PATH, corrupt_path)
+                            os.remove(DB_PATH)
+                        except Exception:
+                            pass
+                    # remove WAL/shm files if present
+                    for sfx in (DB_PATH + '-wal', DB_PATH + '-shm'):
+                        try:
+                            if os.path.exists(sfx):
+                                os.remove(sfx)
+                        except Exception:
+                            pass
+            except Exception:
+                # if we can't open or check, move aside the file to allow recreation
+                try:
+                    ts = int(_time.time())
+                    corrupt_path = DB_PATH + f'.corrupt_backup.{ts}'
+                    os.rename(DB_PATH, corrupt_path)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
     with get_db() as db:
         db.executescript("""
             CREATE TABLE IF NOT EXISTS users (
@@ -82,7 +126,7 @@ def init_db():
                 obj TEXT,
                 details TEXT
             );
-            CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts);
         """)
 
         # ── migrate user_statuses to global (roblox_id-only primary key) ──

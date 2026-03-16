@@ -9,7 +9,15 @@ document.querySelectorAll('.tab').forEach(function(tab) {
     document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
     if (tab.dataset.tab === 'history') loadHistory();
     if (tab.dataset.tab === 'queue') loadQueue();
-    if (tab.dataset.tab === 'admin' && isAdmin()) loadAdminUsers();
+    if (tab.dataset.tab === 'admin' && isAdmin()) {
+      loadAdminUsers();
+      try {
+        // load audit with selected limit (default 200)
+        var limitEl = document.getElementById('auditLimit');
+        var lim = limitEl ? parseInt(limitEl.value) : 200;
+        loadAudit(lim);
+      } catch(e) {}
+    }
   });
 });
 

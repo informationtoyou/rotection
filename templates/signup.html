@@ -160,16 +160,6 @@ function renderAffiliates() {
   // populate moderator division chips
   var grid = document.getElementById('modDivGrid');
   grid.innerHTML = '';
-  affiliatesData.forEach(function(a) {
-    var chip = document.createElement('div');
-    chip.className = 'mod-div-chip';
-    chip.dataset.id = String(a.id);
-    chip.dataset.name = a.name;
-    chip.textContent = a.name;
-    if (a.relationship === 'enemy') chip.textContent += ' ⚔️';
-    chip.onclick = function() { toggleModDiv(this); };
-    grid.appendChild(chip);
-  });
 }
 
 async function fetchAffiliates() {
