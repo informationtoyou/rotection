@@ -165,7 +165,7 @@ function renderAffiliates() {
     chip.className = 'mod-div-chip';
     chip.dataset.id = a.id;
     chip.dataset.name = a.name;
-    chip.textContent = a.name + (a.relationship === 'enemy' ? ' ⚔️' : '');
+    chip.textContent = a.name + (a.relationship === 'enemy' ? '' : '');
     chip.onclick = function() { toggleModDiv(chip); };
     grid.appendChild(chip);
   });
