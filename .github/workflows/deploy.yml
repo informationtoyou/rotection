@@ -15,54 +15,78 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Notify site and wait for scan
+        shell: bash
         run: |
           SITE="https://${{ secrets.PA_USERNAME }}.pythonanywhere.com"
           KEY="${{ secrets.DEPLOY_SECRET }}"
 
           if [ -z "$KEY" ]; then
             echo "DEPLOY_SECRET not set. Skipping notify+wait."
-          else
-            echo "=== Step 1: Check if deploy endpoints exist ==="
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SITE/api/deploy/status")
-            echo "GET /api/deploy/status -> HTTP $STATUS"
+            exit 0
+          fi
 
-            if [ "$STATUS" != "200" ]; then
-              echo "Endpoints not live yet (first deploy). Skipping notify+wait."
-              exit 0
-            fi
+          echo "=== Step 1: Check if deploy endpoints exist ==="
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SITE/api/deploy/status" || echo "000")
+          echo "GET /api/deploy/status -> HTTP $STATUS"
 
-            echo "=== Step 2: Notify site ==="
-            NOTIFY=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SITE/api/deploy/notify" \
-              -H "X-Deploy-Secret: $KEY" \
-              -H "Content-Type: application/json" \
-              -d '{"message":"A new update is being deployed. The site will refresh shortly."}')
-            echo "POST /api/deploy/notify -> HTTP $NOTIFY"
+          if [ "$STATUS" != "200" ]; then
+            echo "Endpoints not live yet (first deploy). Skipping notify+wait."
+            exit 0
+          fi
 
-            if [ "$NOTIFY" != "200" ]; then
-              echo "Notify failed. Skipping wait."
-              exit 0
-            fi
+          echo "=== Step 2: Notify site ==="
+          NOTIFY=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SITE/api/deploy/notify" \
+            -H "X-Deploy-Secret: $KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"message":"A new update is being deployed. The site will refresh shortly."}')
+          echo "POST /api/deploy/notify -> HTTP $NOTIFY"
 
-            echo "Banner is now visible to users."
+          if [ "$NOTIFY" != "200" ]; then
+            echo "Notify failed with HTTP $NOTIFY. Skipping wait."
+            exit 0
+          fi
 
-            echo "=== Step 3: Wait for scan to finish ==="
-            while true; do
-              RESP=$(curl -s "$SITE/api/deploy/status" 2>/dev/null || echo "")
-              if [ -z "$RESP" ]; then
-                echo "Site unreachable. Proceeding."
-                break
-              fi
-              IS_SCANNING=$(echo "$RESP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('scanning',False))" 2>/dev/null || echo "False")
-              if [ "$IS_SCANNING" != "True" ]; then
-                echo "No scan running. Proceeding."
-                break
-              fi
-              echo "Scan running. Waiting 15s..."
+          echo "Banner is now visible to users."
+          echo "=== Step 3: Wait for scan to finish (max 120 iterations = 30 mins) ==="
+          WAIT_COUNT=0
+          MAX_WAIT=120
+
+          while [ "$WAIT_COUNT" -lt "$MAX_WAIT" ]; do
+            RESP=$(curl -s -m 10 "$SITE/api/deploy/status" 2>/dev/null || echo "{}")
+
+            if [ -z "$RESP" ] || [ "$RESP" = "{}" ]; then
+              echo "[$WAIT_COUNT/$MAX_WAIT] Site unreachable or no response. Retrying..."
+              WAIT_COUNT=$((WAIT_COUNT + 1))
               sleep 15
-            done
+              continue
+            fi
+
+            IS_SCANNING=$(echo "$RESP" | python3 -c "import sys,json; data=json.load(sys.stdin); print('true' if data.get('scanning',False) else 'false')" 2>/dev/null || echo "unknown")
+
+            if [ "$IS_SCANNING" = "unknown" ]; then
+              echo "[$WAIT_COUNT/$MAX_WAIT] Failed to parse response: $RESP"
+              WAIT_COUNT=$((WAIT_COUNT + 1))
+              sleep 15
+              continue
+            fi
+
+            if [ "$IS_SCANNING" = "false" ]; then
+              echo "[$WAIT_COUNT/$MAX_WAIT] No scan running. Safe to deploy."
+              break
+            fi
+
+            echo "[$WAIT_COUNT/$MAX_WAIT] Scan running. Waiting 15s..."
+            WAIT_COUNT=$((WAIT_COUNT + 1))
+            sleep 15
+          done
+
+          if [ "$WAIT_COUNT" -eq "$MAX_WAIT" ]; then
+            echo "WARNING: Timeout waiting for scan to complete (waited 30 mins)."
+            echo "Proceeding with deployment anyway - queue worker will continue in background."
           fi
 
       - name: Pull latest code safely
+        shell: bash
         run: |
           curl -s -X POST \
             "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
@@ -73,6 +97,7 @@ jobs:
           sleep 10
 
       - name: Install dependencies
+        shell: bash
         run: |
           curl -s -X POST \
             "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/${{ secrets.PA_CONSOLE_NUMBER }}/send_input/" \
@@ -83,8 +108,9 @@ jobs:
           sleep 15
 
       - name: Reload web app
+        shell: bash
         run: |
           curl -s -X POST \
             "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/${{ secrets.PA_USERNAME }}.pythonanywhere.com/reload/" \
             -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}"
-          echo "Reload requested."
+          echo "Reload requested. Deploy complete!"
