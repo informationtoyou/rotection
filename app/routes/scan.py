@@ -102,7 +102,7 @@ def cancel_scan():
 @scan_bp.route("/api/admin/queue/<int:queue_id>/delete", methods=["POST"])
 @admin_required
 def admin_delete_queue_scan(queue_id):
-    """Admin endpoint to delete a queued or running scan."""
+    """Admin endpoint to delete a queued or running scan (even if stuck)."""
     entry = get_queue_entry(queue_id)
     if not entry:
         return jsonify({"error": "Queue entry not found"}), 404
@@ -110,27 +110,37 @@ def admin_delete_queue_scan(queue_id):
     user = get_current_user()
     
     if entry["status"] == "running":
-        # Cancel the currently running scan
+        # Try to cancel if actually running, but force-delete regardless
+        # This handles the PythonAnywhere reload edge case where status is "running" but is_scanning() is False
         if is_scanning():
             scan_progress.cancel()
-            mark_queue_failed(queue_id)
-            try:
-                actor_id = user.get("id") if user else None
-                log_audit(actor_id, "scan_deleted", obj=str(queue_id), details=json.dumps({"reason": "admin_delete", "group_id": entry["group_id"]}))
-            except Exception:
-                pass
-            return jsonify({"ok": True, "message": "Running scan cancelled"})
-        else:
-            return jsonify({"error": "Scan claims to be running but is not"}), 500
+        
+        # Always mark as failed - this removes the stuck entry from the queue
+        mark_queue_failed(queue_id)
+        try:
+            actor_id = user.get("id") if user else None
+            log_audit(actor_id, "scan_deleted", obj=str(queue_id), details=json.dumps({
+                "reason": "admin_delete_running", 
+                "group_id": entry["group_id"],
+                "was_actually_running": is_scanning()
+            }))
+        except Exception:
+            pass
+        return jsonify({"ok": True, "message": "Running scan removed"})
+    
     elif entry["status"] == "queued":
         # Mark queued scan as failed (effectively removing it from queue)
         mark_queue_failed(queue_id)
         try:
             actor_id = user.get("id") if user else None
-            log_audit(actor_id, "scan_deleted", obj=str(queue_id), details=json.dumps({"reason": "admin_delete", "group_id": entry["group_id"]}))
+            log_audit(actor_id, "scan_deleted", obj=str(queue_id), details=json.dumps({
+                "reason": "admin_delete_queued", 
+                "group_id": entry["group_id"]
+            }))
         except Exception:
             pass
         return jsonify({"ok": True, "message": "Queued scan removed"})
+    
     else:
         return jsonify({"error": f"Cannot delete scan with status: {entry['status']}"}), 400
 
