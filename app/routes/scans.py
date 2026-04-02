@@ -55,24 +55,68 @@ def discord_export(scan_id):
     if not _can_user_see_scan(user, scan):
         return jsonify({"error": "You don't have permission to view this scan"}), 403
 
+    # Get filter parameters from query string
+    min_confidence = request.args.get("min_confidence", 0, type=float)
+    exclude_seabanned = request.args.get("exclude_seabanned", "false").lower() == "true"
+    exclude_false_positives = request.args.get("exclude_false_positives", "true").lower() == "true"
+    
     users = scan.get("users", {})
+    
+    # Get user statuses for filtering
+    from app.database import get_user_statuses_for_scan
+    roblox_ids = [str(uid) for uid in users.keys()]
+    statuses = get_user_statuses_for_scan(roblox_ids) if roblox_ids else {}
+    
+    discord_set = set()
+    users_with_discord = []
+    
+    for uid, u in users.items():
+        accs = u.get("discord_accounts", [])
+        if not accs:
+            continue
+        
+        # Apply confidence filter
+        confidence = u.get("confidence", 0)
+        if confidence < min_confidence:
+            continue
+        
+        # Apply status filters
+        user_status = statuses.get(str(uid), {}).get("status", "")
+        
+        if exclude_seabanned and user_status == "SEA Banned":
+            continue
+        
+        if exclude_false_positives and user_status == "False Positive":
+            continue
+        
+        # Add to export
+        users_with_discord.append({
+            "roblox_id": u.get("id"),
+            "roblox_name": u.get("name", "Unknown"),
+            "flag_type": u.get("flagName", "Unknown"),
+            "confidence": confidence,
+            "status": user_status,
+            "discord_accounts": accs,
+        })
+        
+        # Collect unique discord IDs
+        for acc in accs:
+            discord_id = acc.get("discord_id") or acc.get("id")
+            if discord_id:
+                discord_set.add(str(discord_id))
+    
     export = {
         "scan_id": scan_id,
         "primary_group": scan.get("primary_group_name", "Unknown"),
         "timestamp": scan.get("timestamp"),
-        "discord_ids": scan.get("discord_ids", []),
-        "users_with_discord": [],
+        "filters": {
+            "min_confidence": min_confidence,
+            "exclude_seabanned": exclude_seabanned,
+            "exclude_false_positives": exclude_false_positives,
+        },
+        "discord_ids": sorted(list(discord_set)),
+        "users_with_discord": users_with_discord,
     }
-    for uid, u in users.items():
-        accs = u.get("discord_accounts", [])
-        if accs:
-            export["users_with_discord"].append({
-                "roblox_id": u.get("id"),
-                "roblox_name": u.get("name", "Unknown"),
-                "flag_type": u.get("flagName", "Unknown"),
-                "confidence": u.get("confidence", 0),
-                "discord_accounts": accs,
-            })
 
     return Response(
         json.dumps(export, indent=2),
@@ -141,7 +185,7 @@ def _filter_scans_for_user(scans: list[dict], user: dict) -> list[dict]:
     for s in scans:
         primary_gid = s.get("primary_group_id")
         # "All of SEA" scans visible to everyone
-        if primary_gid == SEA_GROUP_ID and s.get("include_allies"):
+        if primary_gid == SEA_GROUP_ID and s.get("include_aliases"):
             visible.append(s)
             continue
         # user's own scans

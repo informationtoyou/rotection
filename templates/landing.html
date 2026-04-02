@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a0a0f">
+<meta name="description" content="Rotection — Scan Roblox groups for flagged users (Rule 19 Enforcement)">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<title>Rotection</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='landing.css') }}">
+</head>
+<body>
+
+<!-- Navigation Bar -->
+<nav class="navbar">
+  <div class="nav-container">
+    <div class="nav-logo">
+      <span class="logo-icon">🛡️</span>
+      <span class="logo-text">Rotection</span>
+    </div>
+    <div class="nav-links">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#how-it-works" class="nav-link">How It Works</a>
+      <a href="#stats" class="nav-link">Stats</a>
+      <a href="{{ url_for('auth.login_page') }}" class="nav-link btn-login">Login</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero Section -->
+<section class="hero">
+  <div class="hero-content">
+    <h1 class="hero-title">
+      <span class="gradient-text">Protect Your Division</span>
+      <br>
+      <span class="hero-subtitle">Detect Rule 19 Violators Instantly</span>
+    </h1>
+    <p class="hero-desc">
+      Rotection scans Roblox groups in real-time to identify flagged players using Rotector, manage their linked Discord accounts, and enforce Rule 19 efficiently.
+    </p>
+    <div class="hero-buttons">
+      <a href="{{ url_for('auth.login_page') }}" class="btn btn-primary btn-lg">Get Started</a>
+      <a href="#features" class="btn btn-secondary btn-lg">Learn More</a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat-box">
+        <div class="stat-value">5K+</div>
+        <div class="stat-label">Flagged Users Detected</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">5K+</div>
+        <div class="stat-label">Discord IDs Extracted</div>
+      </div>
+    </div>
+  </div>
+  <div class="hero-visual">
+    <div class="floating-card card-1">
+      <div class="card-icon">📊</div>
+      <div class="card-text">Real-time Scanning</div>
+    </div>
+    <div class="floating-card card-2">
+      <div class="card-icon">🎯</div>
+      <div class="card-text">Smart Filtering</div>
+    </div>
+    <div class="floating-card card-3">
+      <div class="card-icon">⚡</div>
+      <div class="card-text">Lightning Fast</div>
+    </div>
+  </div>
+</section>
+
+<!-- Features Section -->
+<section id="features" class="features">
+  <div class="section-header">
+    <h2>Powerful Features</h2>
+    <p>Everything you need to protect your community</p>
+  </div>
+  
+  <div class="features-grid">
+    <!-- Feature 1: Scanning -->
+    <div class="feature-card">
+      <div class="feature-icon">🔍</div>
+      <h3>Comprehensive Scanning</h3>
+      <p>Scan entire Roblox groups and their ally/enemy networks to identify flagged players instantly.</p>
+      <ul class="feature-list">
+        <li>Scan primary group members</li>
+        <li>Include allied groups</li>
+        <li>Include enemy groups</li>
+        <li>Real-time progress tracking</li>
+      </ul>
+    </div>
+
+    <!-- Feature 2: Discord IDs -->
+    <div class="feature-card">
+      <div class="feature-icon">💬</div>
+      <h3>Discord ID Extraction</h3>
+      <p>Automatically extract and export discord IDs from flagged players with precision filtering.</p>
+      <ul class="feature-list">
+        <li>Extract discord accounts</li>
+        <li>Filter by confidence level</li>
+        <li>Remove false positives</li>
+        <li>View SEA banned users</li>
+      </ul>
+    </div>
+
+    <!-- Feature 3: Smart Filtering -->
+    <div class="feature-card">
+      <div class="feature-icon">🎯</div>
+      <h3>Intelligent Filtering</h3>
+      <p>Filter results with multiple criteria to get exactly the data you need with confidence thresholds.</p>
+      <ul class="feature-list">
+        <li>Confidence level filtering</li>
+        <li>Status-based filtering</li>
+        <li>Multiple export formats</li>
+        <li>Batch processing</li>
+      </ul>
+    </div>
+
+    <!-- Feature 4: Queue Management -->
+    <div class="feature-card">
+      <div class="feature-icon">📋</div>
+      <h3>Queue System</h3>
+      <p>Queue multiple scans and manage them efficiently with real-time status updates.</p>
+      <ul class="feature-list">
+        <li>Queue multiple scans</li>
+        <li>Position tracking</li>
+        <li>Status monitoring</li>
+        <li>Admin controls</li>
+      </ul>
+    </div>
+
+    <!-- Feature 5: User Management -->
+    <div class="feature-card">
+      <div class="feature-icon">👥</div>
+      <h3>User Status Management</h3>
+      <p>Categorize players with global statuses and maintain comprehensive audit trails for compliance.</p>
+      <ul class="feature-list">
+        <li>SEA User database</li>
+        <li>Status categorization</li>
+        <li>Full audit logs</li>
+        <li>Role-based access</li>
+      </ul>
+    </div>
+
+    <!-- Feature 6: Admin Controls -->
+    <div class="feature-card">
+      <div class="feature-icon">⚙️</div>
+      <h3>Admin Dashboard</h3>
+      <p>Son. Not a feature you'd use, but... it exists!</p>
+      <ul class="feature-list">
+        <li>User management</li>
+        <li>Delete ongoing scans</li>
+        <li>Detailed audit logs</li>
+        <li>Manage Role assignments</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- How It Works Section -->
+<section id="how-it-works" class="how-it-works">
+  <div class="section-header">
+    <h2>How It Works</h2>
+    <p>Simple & Effective</p>
+  </div>
+
+  <div class="steps-container">
+    <div class="step">
+      <div class="step-number">1</div>
+      <div class="step-icon">🔐</div>
+      <h3>Login</h3>
+      <p>Sign in with your account to access the dashboard.</p>
+    </div>
+
+    <div class="step-arrow">→</div>
+
+    <div class="step">
+      <div class="step-number">2</div>
+      <div class="step-icon">⚙️</div>
+      <h3>Configure</h3>
+      <p>Select your group, choose whether to include allies/enemies, and customize your scan parameters.</p>
+    </div>
+
+    <div class="step-arrow">→</div>
+
+    <div class="step">
+      <div class="step-number">3</div>
+      <div class="step-icon">🚀</div>
+      <h3>Scan</h3>
+      <p>Launch the scan and watch real-time progress. The system processes thousands of players efficiently.</p>
+    </div>
+
+    <div class="step-arrow">→</div>
+
+    <div class="step">
+      <div class="step-number">4</div>
+      <div class="step-icon">📊</div>
+      <h3>Analyze</h3>
+      <p>View detailed results with confidence scores, flags, flag information, and player information. Apply filters as needed.</p>
+    </div>
+
+    <div class="step-arrow">→</div>
+
+    <div class="step">
+      <div class="step-number">5</div>
+      <div class="step-icon">💾</div>
+      <h3>Export</h3>
+      <p>Download results in multiple formats. Filter out false positives and get clean discord ID lists.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Statistics Section -->
+<section id="stats" class="stats-section">
+  <div class="section-header">
+    <h2>By The Numbers</h2>
+    <p>Making SEA safer every day</p>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-item">
+      <div class="stat-number">24/7</div>
+      <div class="stat-text">Uptime</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-number">FAST</div>
+      <div class="stat-text">Scanning</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-number">HIGH</div>
+      <div class="stat-text">Accuracy</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-number">LOW</div>
+      <div class="stat-text">False Positives*</div>
+    </div>
+  </div>
+  <p class="stats-note">*With proper filtering applied</p>
+</section>
+
+<!-- Roles Section -->
+<section class="roles">
+  <div class="section-header">
+    <h2>User Roles</h2>
+    <p>Flexible permission system for your needs</p>
+  </div>
+
+  <div class="roles-grid">
+    <div class="role-card">
+      <div class="role-title">SEA Moderator</div>
+      <p>View all scans across all groups. Set user statuses and manage SEA-wide Rule 19 enforcement.</p>
+    </div>
+    <div class="role-card">
+      <div class="role-title">🎖️ Division Administrator</div>
+      <p>Manage the flagged users in the divisions you moderate.</p>
+    </div>
+    <div class="role-card">
+      <div class="role-title">👤 Individual</div>
+      <p>Scan specific groups. View your own scan results and manage your scans.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CTA Section -->
+<section class="cta">
+  <div class="cta-content">
+    <h2>Ready to Protect your Community?</h2>
+    <p>Join the people using Rotection to keep their communities safe.</p>
+    <a href="{{ url_for('auth.login_page') }}" class="btn btn-primary btn-lg">Get Started Now</a>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="footer-content">
+    <p>&copy; 2026 Rotection. Protecting SEA!</p>
+    <p class="footer-note">Unaffiliated with CFront Interactive | In process of being approved for official use by Mod Manager LamboPlayer57</p>
+  </div>
+</footer>
+
+<script src="{{ url_for('static', filename='landing.js') }}"></script>
+</body>
+</html>

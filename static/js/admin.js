@@ -63,6 +63,26 @@ async function deleteScan(scanId, evt) {
   } catch(e) {}
 }
 
+// ──────────────────── Delete queued/running scan (ADMIN) ────────────────────
+async function adminDeleteQueuedScan(queueId, evt) {
+  evt.stopPropagation();
+  if (!confirm('Delete this scan from the queue?')) return;
+  try {
+    var resp = await fetch(API_BASE + '/api/admin/queue/' + queueId + '/delete', { method: 'POST' });
+    if (resp.ok) {
+      var d = await resp.json();
+      showNotification(d.message || 'Scan deleted', 'success');
+      loadQueue();
+    } else {
+      var d = await resp.json().catch(function() { return {}; });
+      alert(d.error || 'Cannot delete scan');
+    }
+  } catch(e) {
+    console.error(e);
+    alert('Network error');
+  }
+}
+
 // ──────────────────── History ────────────────────
 async function loadHistory() {
   var el = document.getElementById('historyList');
@@ -103,6 +123,7 @@ async function loadQueue() {
       html += '<div class="qi-info"><strong>Group ' + q.group_id + '</strong>';
       html += '<div class="text-muted text-xs">By ' + esc(q.requested_by) + ' · ' + (q.include_allies ? 'with allies' : 'no allies') + '</div></div>';
       html += '<span class="qi-status ' + stClass + '">' + q.status.toUpperCase() + '</span>';
+      if (isAdmin()) html += '<button class="btn btn-danger btn-sm" style="margin-left: 8px;" onclick="adminDeleteQueuedScan(' + q.id + ', event)">Delete</button>';
       html += '</div>';
     });
     el.innerHTML = html;

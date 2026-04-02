@@ -9,8 +9,9 @@ from scanner import scan_progress, is_scanning, FLAG_TYPES
 from app.database import (
     enqueue_scan, get_queue, get_queue_position, get_queue_entry,
     set_user_status, get_user_statuses_for_scan, VALID_STATUSES, PUBLIC_STATUSES, log_audit,
+    mark_queue_failed,
 )
-from app.routes.auth import login_required, get_current_user
+from app.routes.auth import login_required, get_current_user, admin_required
 
 scan_bp = Blueprint("scan", __name__)
 
@@ -96,6 +97,42 @@ def cancel_scan():
             return jsonify({"error": "Only the person who started this scan (or an admin) can cancel it"}), 403
     scan_progress.cancel()
     return jsonify({"ok": True, "message": "Cancellation requested"})
+
+
+@scan_bp.route("/api/admin/queue/<int:queue_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_queue_scan(queue_id):
+    """Admin endpoint to delete a queued or running scan."""
+    entry = get_queue_entry(queue_id)
+    if not entry:
+        return jsonify({"error": "Queue entry not found"}), 404
+    
+    user = get_current_user()
+    
+    if entry["status"] == "running":
+        # Cancel the currently running scan
+        if is_scanning():
+            scan_progress.cancel()
+            mark_queue_failed(queue_id)
+            try:
+                actor_id = user.get("id") if user else None
+                log_audit(actor_id, "scan_deleted", obj=str(queue_id), details=json.dumps({"reason": "admin_delete", "group_id": entry["group_id"]}))
+            except Exception:
+                pass
+            return jsonify({"ok": True, "message": "Running scan cancelled"})
+        else:
+            return jsonify({"error": "Scan claims to be running but is not"}), 500
+    elif entry["status"] == "queued":
+        # Mark queued scan as failed (effectively removing it from queue)
+        mark_queue_failed(queue_id)
+        try:
+            actor_id = user.get("id") if user else None
+            log_audit(actor_id, "scan_deleted", obj=str(queue_id), details=json.dumps({"reason": "admin_delete", "group_id": entry["group_id"]}))
+        except Exception:
+            pass
+        return jsonify({"ok": True, "message": "Queued scan removed"})
+    else:
+        return jsonify({"error": f"Cannot delete scan with status: {entry['status']}"}), 400
 
 
 @scan_bp.route("/api/queue")

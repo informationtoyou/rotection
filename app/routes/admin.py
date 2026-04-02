@@ -28,10 +28,24 @@ def list_users():
 def admin_audit():
     # params: limit, since_ts
     try:
-        limit = int(request.args.get("limit", 200))
+        # Ensure limit is an integer
+        limit_param = request.args.get("limit", "200")
+        try:
+            limit = int(limit_param)
+        except (ValueError, TypeError):
+            limit = 200
+        
+        # Ensure since_ts is an integer if provided
         since = request.args.get("since_ts")
-        since_ts = int(since) if (since and since.isdigit()) else None
+        since_ts = None
+        if since:
+            try:
+                since_ts = int(since)
+            except (ValueError, TypeError):
+                since_ts = None
+        
         rows = get_audit(limit=limit, since_ts=since_ts)
+        
         # resolve actor usernames cheaply
         actor_ids = {r.get("actor_id") for r in rows if r.get("actor_id") is not None}
         actors = {}
@@ -41,8 +55,10 @@ def admin_audit():
                 actors[aid] = (u["username"] if u else None)
             except Exception:
                 actors[aid] = None
+        
         for r in rows:
             r["actor_username"] = actors.get(r.get("actor_id")) if r.get("actor_id") else None
+        
         return jsonify(rows)
     except Exception as e:
         import traceback
