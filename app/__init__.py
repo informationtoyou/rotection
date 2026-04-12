@@ -2,6 +2,7 @@
 Flask app creation and config
 """
 
+import logging
 import os
 from datetime import timedelta
 from flask import Flask
@@ -12,6 +13,8 @@ from dotenv import load_dotenv
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 load_dotenv(os.path.join(_PROJECT_ROOT, ".env"))
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> Flask:
@@ -27,7 +30,20 @@ def create_app() -> Flask:
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-    CORS(app)
+    # CORS — restrict to declared origins when ALLOWED_ORIGINS is set
+    allowed_origins_env = os.getenv("ALLOWED_ORIGINS")
+    if allowed_origins_env:
+        allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+        CORS(app, origins=allowed_origins)
+    else:
+        logger.warning("ALLOWED_ORIGINS not set; allowing all CORS origins")
+        CORS(app)
+
+    # warn on missing secrets so misconfigured deployments are obvious in logs
+    if not os.getenv("API_KEY_HEADER"):
+        logger.warning("API_KEY_HEADER not set; Rotector API calls will fail")
+    if not os.getenv("DEPLOY_SECRET"):
+        logger.warning("DEPLOY_SECRET not set; deploy endpoints are unprotected")
 
     # init database + admin account
     from app.database import init_db, ensure_admin

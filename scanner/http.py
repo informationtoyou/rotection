@@ -7,12 +7,12 @@ import time
 
 from scanner.constants import (
     ROTECTOR_BASE, API_KEY_HEADER, WORKER_THREADS, MAX_RETRIES,
-)
-from scanner.rate_limiter import RateLimiter
-from scanner.constants import (
     ROTECTOR_RATE_LIMIT, ROTECTOR_RATE_WINDOW,
     ROBLOX_RATE_LIMIT, ROBLOX_RATE_WINDOW,
+    HTTP_TIMEOUT_ROTECTOR, HTTP_TIMEOUT_ROBLOX,
+    HTTP_RETRY_SLEEP, HTTP_RETRY_AFTER_DEFAULT,
 )
+from scanner.rate_limiter import RateLimiter
 
 # -- rate limiters --
 rotector_limiter = RateLimiter(ROTECTOR_RATE_LIMIT, ROTECTOR_RATE_WINDOW)
@@ -31,85 +31,85 @@ _roblox_session.mount("https://", requests.adapters.HTTPAdapter(
 ))
 
 
+def _parse_retry_after(headers: dict) -> int:
+    """Parse the Retry-After header, falling back to the default if missing or non-integer."""
+    raw = headers.get("Retry-After")
+    if raw is not None:
+        try:
+            return int(raw)
+        except ValueError:
+            pass
+    return HTTP_RETRY_AFTER_DEFAULT
+
+
+def _request_with_retry(
+    session: requests.Session,
+    limiter: RateLimiter,
+    method: str,
+    url: str,
+    timeout: int,
+    raise_for_status: bool = True,
+    **kwargs,
+) -> dict | None:
+    """
+    Shared retry loop used by all four API helpers.
+
+    Waits on the rate limiter before each attempt, handles 429 with Retry-After,
+    and retries on network errors up to MAX_RETRIES times.
+    Returns the parsed JSON dict on success, or None after all retries are exhausted.
+    """
+    for attempt in range(MAX_RETRIES):
+        limiter.wait()
+        try:
+            resp = session.request(method, url, timeout=timeout, **kwargs)
+            if resp.status_code == 429:
+                time.sleep(_parse_retry_after(resp.headers))
+                continue
+            if raise_for_status:
+                resp.raise_for_status()
+                return resp.json()
+            if resp.status_code == 200:
+                return resp.json()
+            return None
+        except requests.RequestException:
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(HTTP_RETRY_SLEEP)
+                continue
+            return None
+    return None
+
+
 # -- Rotector helpers --
 
 def rotector_get(path: str, params: dict | None = None) -> dict | None:
-    url = f"{ROTECTOR_BASE}{path}"
-    for attempt in range(MAX_RETRIES):
-        rotector_limiter.wait()
-        try:
-            resp = _rotector_session.get(url, params=params, timeout=30)
-            if resp.status_code == 429:
-                retry = int(resp.headers.get("Retry-After", 5))
-                time.sleep(retry)
-                continue
-            resp.raise_for_status()
-            return resp.json()
-        except requests.RequestException:
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(1)
-                continue
-            return None
-    return None
+    return _request_with_retry(
+        _rotector_session, rotector_limiter, "GET",
+        f"{ROTECTOR_BASE}{path}", HTTP_TIMEOUT_ROTECTOR,
+        raise_for_status=True, params=params,
+    )
 
 
 def rotector_post(path: str, json_body: dict) -> dict | None:
-    url = f"{ROTECTOR_BASE}{path}"
-    for attempt in range(MAX_RETRIES):
-        rotector_limiter.wait()
-        try:
-            resp = _rotector_session.post(url, json=json_body, timeout=30)
-            if resp.status_code == 429:
-                retry = int(resp.headers.get("Retry-After", 5))
-                time.sleep(retry)
-                continue
-            resp.raise_for_status()
-            return resp.json()
-        except requests.RequestException:
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(1)
-                continue
-            return None
-    return None
+    return _request_with_retry(
+        _rotector_session, rotector_limiter, "POST",
+        f"{ROTECTOR_BASE}{path}", HTTP_TIMEOUT_ROTECTOR,
+        raise_for_status=True, json=json_body,
+    )
 
 
 # -- Roblox helpers --
 
 def roblox_get(url: str, params: dict | None = None) -> dict | None:
-    for attempt in range(MAX_RETRIES):
-        roblox_limiter.wait()
-        try:
-            resp = _roblox_session.get(url, params=params, timeout=20)
-            if resp.status_code == 429:
-                retry = int(resp.headers.get("Retry-After", 5))
-                time.sleep(retry)
-                continue
-            if resp.status_code == 200:
-                return resp.json()
-            return None
-        except requests.RequestException:
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(1)
-                continue
-            return None
-    return None
+    return _request_with_retry(
+        _roblox_session, roblox_limiter, "GET",
+        url, HTTP_TIMEOUT_ROBLOX,
+        raise_for_status=False, params=params,
+    )
 
 
 def roblox_post(url: str, json_body: dict) -> dict | None:
-    for attempt in range(MAX_RETRIES):
-        roblox_limiter.wait()
-        try:
-            resp = _roblox_session.post(url, json=json_body, timeout=20)
-            if resp.status_code == 429:
-                retry = int(resp.headers.get("Retry-After", 5))
-                time.sleep(retry)
-                continue
-            if resp.status_code == 200:
-                return resp.json()
-            return None
-        except requests.RequestException:
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(1)
-                continue
-            return None
-    return None
+    return _request_with_retry(
+        _roblox_session, roblox_limiter, "POST",
+        url, HTTP_TIMEOUT_ROBLOX,
+        raise_for_status=False, json=json_body,
+    )

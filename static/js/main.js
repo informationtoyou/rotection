@@ -53,7 +53,7 @@ async function init() {
     var scans = await resp2.json().catch(function() { return []; });
     if (scans && scans.length > 0 && !currentScanData) {
       var seaScan = scans.find(function(s) {
-        return s.primary_group_id === 2648601 && s.include_allies;
+        return s.primary_group_id === SEA_GROUP_ID && s.include_allies;
       });
       var defaultScan = seaScan || scans[0];
       loadScanResults(defaultScan.id);

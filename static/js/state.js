@@ -31,6 +31,8 @@ var STATUS_CSS = {
 var ALL_STATUSES = ['Pending Review','SEA Banned','False Positive','Suspicious','Under Investigation'];
 var ROLE_OPTIONS = ['SEA Moderator','Division Administrator','Division Leader','Moderator at a division','Individual','Other'];
 
+var SEA_GROUP_ID = 2648601;
+
 var SAFE_THUMB_PREFIX = 'https://tr.rbxcdn.com/';
 
 function safeThumbnail(url) { if (!url) return ''; return url.startsWith(SAFE_THUMB_PREFIX) ? esc(url) : ''; }

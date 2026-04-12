@@ -1,5 +1,11 @@
 // Pagination and filtering and loading for scans
 
+var _filterDebounceTimer = null;
+function applyFiltersDebounced() {
+  clearTimeout(_filterDebounceTimer);
+  _filterDebounceTimer = setTimeout(applyFilters, 150);
+}
+
 async function loadScanResults(scanId) {
   document.getElementById('resultsContent').innerHTML = '<div class="empty-state"><div class="icon pulse">⏳</div><p>Loading scan results...</p></div>';
   document.getElementById('statsContent').innerHTML = '<div class="empty-state"><div class="icon pulse">⏳</div><p>Loading statistics...</p></div>';
@@ -63,7 +69,7 @@ function renderResults() {
   html += '</div></div>';
 
   html += '<div class="card"><h2>Filters</h2><div class="filter-bar">';
-  html += '<input type="text" class="search-input" id="searchInput" placeholder="Search username, display name, or ID..." oninput="applyFilters()">';
+  html += '<input type="text" class="search-input" id="searchInput" placeholder="Search username, display name, or ID..." oninput="applyFiltersDebounced()">';
   html += '<select id="filterFlag" onchange="applyFilters()"><option value="">All Flags</option>';
   Object.entries(FLAG_MAP).forEach(function(entry) {
     var k = entry[0], v = entry[1];

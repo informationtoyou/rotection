@@ -12,8 +12,9 @@ from scanner import (
     run_scan, scan_progress, is_scanning,
     get_previous_scans, get_scan_by_id,
 )
+from scanner.constants import SEA_MILITARY_GROUP_ID
 
-GROUP_ID = 2648601  # default group (SEA Military), change this to whatever the hell you want
+GROUP_ID = SEA_MILITARY_GROUP_ID  # default group; override with --group=ID
 
 
 def main():

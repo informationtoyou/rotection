@@ -41,6 +41,17 @@ ROBLOX_RATE_WINDOW = 10
 WORKER_THREADS = 50
 MAX_RETRIES = 5
 
+# -- HTTP timeouts & retry behaviour --
+HTTP_TIMEOUT_ROTECTOR = 30      # seconds
+HTTP_TIMEOUT_ROBLOX = 20        # seconds
+HTTP_RETRY_SLEEP = 1            # seconds to sleep between retry attempts
+HTTP_RETRY_AFTER_DEFAULT = 5    # fallback seconds when Retry-After header is missing/invalid
+
+# -- queue worker timings --
+QUEUE_WORKER_POLL_TIMEOUT = 30  # seconds to wait for new work before re-checking
+QUEUE_INTER_SCAN_SLEEP = 2      # seconds between consecutive scans
+QUEUE_ERROR_BACKOFF = 5         # seconds to sleep after an unexpected queue loop error
+
 # -- flag types --
 FLAG_TYPES = {
     0: {"name": "Unflagged", "actionable": False, "color": "#6b7280"},

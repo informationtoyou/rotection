@@ -19,7 +19,7 @@ async function startScan() {
 }
 
 async function scanAllSEA() {
-  await _doScan(2648601, true, true, document.getElementById('btnScanSEA'), '⚓ Scan all of SEA');
+  await _doScan(SEA_GROUP_ID, true, true, document.getElementById('btnScanSEA'), '⚓ Scan all of SEA');
 }
 
 async function scanMyDivision() {

@@ -22,6 +22,52 @@ from scanner.rotector import (
 _scan_lock = threading.Lock()
 
 
+def _fill_missing_display_names(user_records: dict, p=None) -> None:
+    """
+    Two-pass helper that fills missing usernames and displayNames from the Roblox API.
+    Pass 1: users whose name is empty/unknown.
+    Pass 2: users who have a name but are still missing a displayName.
+    Operates in-place on *user_records* (uid_str → record dict).
+    *p* is the optional scan_progress instance used for logging.
+    """
+    def _log(msg):
+        if p:
+            p.log(msg)
+
+    # Pass 1: missing names
+    missing_names = [
+        int(uid) for uid, rec in user_records.items()
+        if not rec.get("name") or rec["name"] == "Unknown" or rec["name"].strip() == ""
+    ]
+    if missing_names:
+        if p:
+            p.set_phase("Resolving usernames", f"Fetching names for {len(missing_names)} users from Roblox")
+        _log(f"Fetching usernames for {len(missing_names)} users missing name data...")
+        name_data = batch_get_user_info(missing_names)
+        filled = 0
+        for uid_str, info in name_data.items():
+            if uid_str in user_records:
+                rec = user_records[uid_str]
+                if not rec.get("name") or rec["name"] == "Unknown" or rec["name"].strip() == "":
+                    rec["name"] = info.get("name", "")
+                    filled += 1
+                if not rec.get("displayName"):
+                    rec["displayName"] = info.get("displayName", "")
+        _log(f"  Filled in {filled} usernames from Roblox")
+
+    # Pass 2: have a name but missing displayName
+    missing_display = [
+        int(uid) for uid, rec in user_records.items()
+        if rec.get("name") and not rec.get("displayName")
+    ]
+    if missing_display:
+        _log(f"Fetching display names for {len(missing_display)} users...")
+        display_data = batch_get_user_info(missing_display)
+        for uid_str, info in display_data.items():
+            if uid_str in user_records and not user_records[uid_str].get("displayName"):
+                user_records[uid_str]["displayName"] = info.get("displayName", "")
+
+
 def is_scanning() -> bool:
     return scan_progress.status == "scanning"
 
@@ -206,32 +252,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         p.update_eta()
 
         # ---- phase 2.5: fill in ALL missing usernames from Roblox ----
-        missing_names = [int(uid) for uid, rec in all_user_records.items()
-                         if not rec["name"] or rec["name"] == "Unknown" or rec["name"].strip() == ""]
-        if missing_names:
-            p.set_phase("Resolving usernames", f"Fetching names for {len(missing_names)} users from Roblox")
-            p.log(f"Fetching usernames for {len(missing_names)} users missing name data...")
-            name_data = batch_get_user_info(missing_names)
-            filled = 0
-            for uid_str, info in name_data.items():
-                if uid_str in all_user_records:
-                    rec = all_user_records[uid_str]
-                    if not rec["name"] or rec["name"] == "Unknown" or rec["name"].strip() == "":
-                        rec["name"] = info.get("name", "")
-                        filled += 1
-                    if not rec["displayName"]:
-                        rec["displayName"] = info.get("displayName", "")
-            p.log(f"  Filled in {filled} usernames from Roblox")
-
-        # also fill display names for users that have a name but no displayName
-        missing_display = [int(uid) for uid, rec in all_user_records.items()
-                           if rec["name"] and not rec["displayName"]]
-        if missing_display:
-            p.log(f"Fetching display names for {len(missing_display)} users...")
-            display_data = batch_get_user_info(missing_display)
-            for uid_str, info in display_data.items():
-                if uid_str in all_user_records and not all_user_records[uid_str]["displayName"]:
-                    all_user_records[uid_str]["displayName"] = info.get("displayName", "")
+        _fill_missing_display_names(all_user_records, p)
 
         # ---- phase 3: batch flag detail lookup (threaded) ----
         p.set_phase("Fetching flag details", "Looking up flag type, confidence, and reasons from Rotector")
@@ -299,7 +320,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                     return
 
                 try:
-                    uid, n_dids, count = future.result()
+                    _, n_dids, count = future.result()
                     p.users_checked = count
                     p.discord_ids_found = len(all_discord_ids)
                     p.progress = 55 + (count / max(len(user_list), 1)) * 40
@@ -313,18 +334,8 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                     pass
 
         # ---- phase 5: final username sweep for any still missing ----
-        still_missing = [int(uid) for uid, rec in all_user_records.items()
-                         if not rec.get("name") or rec["name"] == "Unknown" or rec["name"].strip() == ""]
-        if still_missing:
-            p.log(f"Final username sweep for {len(still_missing)} remaining users...")
-            final_data = batch_get_user_info(still_missing)
-            for uid_str, info in final_data.items():
-                if uid_str in all_user_records:
-                    rec = all_user_records[uid_str]
-                    if not rec.get("name") or rec["name"] == "Unknown":
-                        rec["name"] = info.get("name", f"User_{uid_str}")
-                    if not rec.get("displayName"):
-                        rec["displayName"] = info.get("displayName", "")
+        p.log("Final username sweep for any remaining users...")
+        _fill_missing_display_names(all_user_records, p)
 
         # ---- phase 6: saving ----
         p.set_phase("Saving results", "Writing flagged.txt and updating scan cache")

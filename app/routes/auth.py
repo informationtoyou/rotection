@@ -2,12 +2,12 @@
 Authentication handler
 """
 
-import os
 import functools
 from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template
 
-from app.database import create_user, verify_user, get_user, log_audit
+from app.database import create_user, verify_user, get_user
 from app.affiliates import get_sea_affiliates, get_affiliate_ids, is_affiliates_loaded, is_affiliates_loading
+from app.utils import get_json_body, safe_audit
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -73,7 +73,7 @@ def signup_page():
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
 def api_login():
-    data = request.get_json(force=True, silent=True) or {}
+    data = get_json_body()
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
 
@@ -92,7 +92,7 @@ def api_login():
 
 @auth_bp.route("/api/auth/signup", methods=["POST"])
 def api_signup():
-    data = request.get_json(force=True, silent=True) or {}
+    data = get_json_body()
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
     roles = data.get("roles") or []
@@ -153,11 +153,7 @@ def api_signup():
     session["username"] = user["username"]
     session["is_admin"] = user["is_admin"]
 
-    # audit: new signup
-    try:
-        log_audit(user.get('id'), 'user_signed_up', obj=str(user.get('id')))
-    except Exception:
-        pass
+    safe_audit(user.get("id"), "user_signed_up", obj=str(user.get("id")))
     return jsonify({"ok": True, "user": _safe_user(user)})
 
 
