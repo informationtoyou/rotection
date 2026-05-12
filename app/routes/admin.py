@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__)
 
+_VALID_ROLES = {"SEA Moderator", "Division Administrator", "Division Leader", "Moderator at a division", "Individual", "Other"}
+
 
 @admin_bp.route("/api/admin/users")
 @admin_required
@@ -79,6 +81,11 @@ def update_user(user_id):
     actor_id = actor["id"] if actor else None
 
     if "roles" in data:
+        if not isinstance(data["roles"], list):
+            return jsonify({"error": "roles must be a list"}), 400
+        for r in data["roles"]:
+            if not isinstance(r, str) or r not in _VALID_ROLES:
+                return jsonify({"error": f"Invalid role: {r}"}), 400
         old_roles = user.get("roles")
         update_user_roles(user_id, data["roles"])
         safe_audit(actor_id, "roles_changed", obj=str(user_id),

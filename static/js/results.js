@@ -58,6 +58,30 @@ function renderResults() {
   html += '<div class="stat"><div class="stat-value small">' + ts + '</div><div class="stat-label">Scan Time</div></div>';
   html += '</div>';
 
+  if (canManageDivision()) {
+    var conn = hasRobloxConnection();
+    var oauthReady = robloxConnection && robloxConnection.oauth_configured;
+    var connLabel = conn ? ('Connected as ' + esc(robloxConnection.roblox_username || 'Unknown')) : 'Not connected';
+    var divLabel = esc(currentUser.division_name || ('Group ' + currentUser.division_group_id));
+    var cap = (robloxConnection && robloxConnection.remove_cap) ? robloxConnection.remove_cap : '';
+    html += '<div class="card"><h2>Division Leader Tools</h2>';
+    html += '<div class="text-muted text-xs">Division: ' + divLabel + ' · ' + connLabel + '</div>';
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">';
+    if (!conn) {
+      html += '<button class="btn btn-primary btn-sm" onclick="connectRoblox()" ' + (oauthReady ? '' : 'disabled') + '>Connect with Roblox</button>';
+    } else {
+      html += '<button class="btn btn-secondary btn-sm" onclick="disconnectRoblox()">Disconnect Roblox</button>';
+    }
+    html += '<button class="btn btn-danger btn-sm" onclick="removeFilteredUsersFromGroup()" ' + (conn ? '' : 'disabled') + '>Remove Filtered Users</button>';
+    html += '</div>';
+    if (!oauthReady) {
+      html += '<div class="text-muted text-xs" style="margin-top:8px">Roblox OAuth is not configured on this server.</div>';
+    } else if (cap) {
+      html += '<div class="text-muted text-xs" style="margin-top:8px">Bulk removal cap: ' + cap + ' users per action.</div>';
+    }
+    html += '</div>';
+  }
+
   html += '<div class="card"><h2>Group Filter</h2><div class="group-nav">';
   html += '<div class="group-chip active" data-group="" onclick="filterByGroup(this)">All Groups <span class="count">' + allUsers.length + '</span></div>';
   var primaryGroupName = d.primary_group_name || '';
@@ -87,6 +111,8 @@ function renderResults() {
   html += '<label class="filter-check-label"><input type="checkbox" id="filterHasDiscord" onchange="applyFilters()" class="accent-check"> Has Discord</label>';
   html += '<label class="filter-check-label"><input type="checkbox" id="filterHRHC" onchange="applyFilters()" class="accent-check"> HR/HC Only</label>';
   html += '<label class="filter-check-label"><input type="checkbox" id="filterExcludeHRHC" onchange="applyFilters()" class="accent-check"> Exclude HR/HC</label>';
+  html += '<label class="filter-check-label"><input type="checkbox" id="filterInGroup" onchange="applyFilters()" class="accent-check"> In group only</label>';
+  html += '<label class="filter-check-label"><input type="checkbox" id="filterLeftGroup" onchange="applyFilters()" class="accent-check"> Left group only</label>';
   html += '</div><div class="filter-summary" id="filterSummary"></div></div>';
 
   html += '<div class="card"><h2>Users <span id="resultCount" class="result-count"></span></h2>';
@@ -98,6 +124,7 @@ function renderResults() {
   html += '<th onclick="doSort(\'group_name\')" id="th-group_name">Group</th>';
   html += '<th>Reasons</th><th>Discord</th>';
   html += '<th>Status</th>';
+  html += '<th>In Group</th>';
   html += '<th onclick="doSort(\'isActive\')" id="th-isActive">Active</th>';
   html += '<th>Details</th>';
   html += '</tr></thead><tbody id="resultsBody"></tbody></table></div>';
@@ -125,6 +152,9 @@ function applyFilters() {
   var hasDiscord = document.getElementById('filterHasDiscord') ? document.getElementById('filterHasDiscord').checked : false;
   var hrhcOnly = document.getElementById('filterHRHC') ? document.getElementById('filterHRHC').checked : false;
   var excludeHrhc = document.getElementById('filterExcludeHRHC') ? document.getElementById('filterExcludeHRHC').checked : false;
+  var inGroupOnly = document.getElementById('filterInGroup') ? document.getElementById('filterInGroup').checked : false;
+  var leftGroupOnly = document.getElementById('filterLeftGroup') ? document.getElementById('filterLeftGroup').checked : false;
+  if (inGroupOnly && leftGroupOnly) { inGroupOnly = false; leftGroupOnly = false; }
 
   filteredUsers = allUsers.filter(function(u) {
     if (search && !(u.name||'').toLowerCase().includes(search) && !String(u.id).includes(search) && !(u.displayName||'').toLowerCase().includes(search)) return false;
@@ -136,6 +166,8 @@ function applyFilters() {
     if (hasDiscord && (!u.discord_accounts || u.discord_accounts.length === 0)) return false;
     if (hrhcOnly && !u.is_sea_hrhc) return false;
     if (excludeHrhc && u.is_sea_hrhc) return false;
+    if (inGroupOnly && u.in_group !== true) return false;
+    if (leftGroupOnly && u.in_group !== false) return false;
     if (statusFilter) {
       var st = currentScanStatuses[String(u.id)];
       var uStatus = st ? st.status : 'Pending Review';
@@ -195,6 +227,9 @@ function renderPage() {
     var stObj = currentScanStatuses[String(u.id)];
     var uStatus = stObj ? stObj.status : 'Pending Review';
     var stCss = STATUS_CSS[uStatus] || 'ust-pending-review';
+    var inGroup = (u.in_group === true) ? 'Yes' : (u.in_group === false ? 'No' : '—');
+    var inGroupRole = u.group_role ? (' <span class="text-muted text-xs">(' + esc(u.group_role) + ')</span>') : '';
+    var canRemove = canManageDivision() && hasRobloxConnection() && currentUser && currentUser.division_group_id === u.group_id;
 
     html += '<tr>';
     html += '<td>' + (thumb ? '<img class="avatar" src="' + thumb + '" loading="lazy" onerror="this.style.display=\'none\'">' : '') + '<strong>' + esc(u.name) + '</strong>' + (u.is_sea_hrhc ? ' <span class="hrhc-tag">HR/HC</span>' : '') + '<br><span class="text-muted text-xs">' + esc(u.displayName||'') + ' · ' + u.id + '</span></td>';
@@ -210,11 +245,14 @@ function renderPage() {
       ALL_STATUSES.forEach(function(s) { html += '<option value="' + s + '"' + (uStatus === s ? ' selected' : '') + '>' + s + '</option>'; });
       html += '</select></td>';
     } else {
-      html += '<td><span class="user-status-badge ' + stCss + '">' + esc(uStatus) + '</span></td>';
+    html += '<td><span class="user-status-badge ' + stCss + '">' + esc(uStatus) + '</span></td>';
     }
 
+    html += '<td>' + inGroup + inGroupRole + '</td>';
     html += '<td><span class="status-dot ' + (u.isActive?'active':'inactive') + '"></span>' + (u.isActive?'Yes':'No') + '</td>';
-    html += '<td><button class="btn btn-secondary btn-sm" onclick="showUserDetail(' + u.id + ')">View</button></td>';
+    html += '<td><button class="btn btn-secondary btn-sm" onclick="showUserDetail(' + u.id + ')">View</button>' +
+      (canRemove ? ' <button class="btn btn-danger btn-sm" onclick="removeUserFromGroup(' + u.id + ')">Remove</button>' : '') +
+      '</td>';
     html += '</tr>';
   });
   body.innerHTML = html;
@@ -254,5 +292,69 @@ async function setUserStatus(robloxId, status) {
     var data = await resp.json();
     if (!resp.ok) { alert(data.error || 'Failed to set status'); return; }
     currentScanStatuses[String(robloxId)] = { status: status, set_by: currentUser.username, discord_ids: discordIds };
+  } catch(e) { alert('Network error'); }
+}
+
+async function connectRoblox() {
+  if (!canManageDivision()) return;
+  window.location.href = '/api/roblox/oauth/start';
+}
+
+async function disconnectRoblox() {
+  if (!canManageDivision()) return;
+  if (!confirm('Disconnect your Roblox account?')) return;
+  try {
+    var resp = await fetch(API_BASE + '/api/roblox/oauth/disconnect', { method: 'POST' });
+    var data = await resp.json().catch(function() { return {}; });
+    if (!resp.ok) { alert(data.error || 'Failed to disconnect'); return; }
+    robloxConnection = null;
+    renderResults();
+  } catch(e) { alert('Network error'); }
+}
+
+async function removeUserFromGroup(robloxId) {
+  if (!hasRobloxConnection()) { alert('Connect your Roblox account first'); return; }
+  if (!confirm('Remove this user from your division group?')) return;
+  try {
+    var resp = await fetch(API_BASE + '/api/roblox/remove', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ roblox_ids: [robloxId] })
+    });
+    var data = await resp.json().catch(function() { return {}; });
+    if (!resp.ok) { alert(data.error || 'Failed to remove user'); return; }
+    alert('Removed: ' + (data.removed || []).length + ' · Skipped: ' + (data.skipped || []).length + ' · Failed: ' + Object.keys(data.failed || {}).length);
+    if (currentScanData) {
+      var u = allUsers.find(function(x) { return x.id == robloxId; });
+      if (u) u.in_group = false;
+      renderResults();
+    }
+  } catch(e) { alert('Network error'); }
+}
+
+async function removeFilteredUsersFromGroup() {
+  if (!hasRobloxConnection()) { alert('Connect your Roblox account first'); return; }
+  if (!filteredUsers || filteredUsers.length === 0) { alert('No users match your filters'); return; }
+  var divisionGroupId = currentUser && currentUser.division_group_id;
+  var ids = filteredUsers
+    .filter(function(u) { return u.in_group !== false && u.group_id === divisionGroupId; })
+    .map(function(u) { return u.id; });
+  if (!ids.length) { alert('No in-group users from your division found in the filtered list'); return; }
+  if (!confirm('Remove ' + ids.length + ' user(s) from your division group?')) return;
+  try {
+    var resp = await fetch(API_BASE + '/api/roblox/remove', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ roblox_ids: ids })
+    });
+    var data = await resp.json().catch(function() { return {}; });
+    if (!resp.ok) { alert(data.error || 'Failed to remove users'); return; }
+    alert('Removed: ' + (data.removed || []).length + ' · Skipped: ' + (data.skipped || []).length + ' · Failed: ' + Object.keys(data.failed || {}).length);
+    if (currentScanData) {
+      allUsers.forEach(function(u) {
+        if (data.removed && data.removed.indexOf(u.id) !== -1) u.in_group = false;
+      });
+      renderResults();
+    }
   } catch(e) { alert('Network error'); }
 }

@@ -8,6 +8,7 @@ from app.routes.scans import scans_bp
 from app.routes.deploy import deploy_bp
 from app.routes.auth import auth_bp
 from app.routes.admin import admin_bp
+from app.routes.roblox import roblox_bp
 
 
 def register_routes(app):
@@ -17,3 +18,4 @@ def register_routes(app):
     app.register_blueprint(scans_bp)
     app.register_blueprint(deploy_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(roblox_bp)

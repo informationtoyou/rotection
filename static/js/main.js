@@ -34,6 +34,25 @@ async function init() {
   var user = await loadCurrentUser();
   if (!user) return;
 
+  try {
+    var params = new URLSearchParams(window.location.search);
+    var robloxStatus = params.get('roblox');
+    if (robloxStatus) {
+      var msg = '';
+      if (robloxStatus === 'verified') msg = 'Roblox verification complete. Your Division Leader access is now confirmed.';
+      else if (robloxStatus === 'not_in_group') msg = 'Roblox verification failed: your account is not in the division group.';
+      else if (robloxStatus === 'token_failed') msg = 'Roblox verification failed: token exchange error.';
+      else if (robloxStatus === 'userinfo_failed') msg = 'Roblox verification failed: could not fetch user info.';
+      else if (robloxStatus === 'invalid_state') msg = 'Roblox verification failed: invalid session state.';
+      else if (robloxStatus === 'encrypt_failed') msg = 'Roblox verification failed: server encryption error.';
+      else msg = 'Roblox verification failed. Please try again.';
+      if (msg) alert(msg);
+      params.delete('roblox');
+      var clean = window.location.pathname + (params.toString() ? ('?' + params.toString()) : '');
+      window.history.replaceState({}, document.title, clean);
+    }
+  } catch(e) {}
+
   startDeployPolling();
 
   try {

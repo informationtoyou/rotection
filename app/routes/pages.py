@@ -2,7 +2,7 @@
 Serves HTML templates for the web UI
 """
 
-from flask import Blueprint, render_template, redirect, url_for, session
+from flask import Blueprint, render_template, session
 
 from app.routes.auth import login_required
 
@@ -28,3 +28,15 @@ def landing():
 def dashboard():
     """Protected dashboard route."""
     return render_template("index.html")
+
+
+@pages_bp.route("/privacy")
+def privacy():
+    """Privacy policy page."""
+    return render_template("privacy.html")
+
+
+@pages_bp.route("/tos")
+def tos():
+    """Terms of service page."""
+    return render_template("tos.html")

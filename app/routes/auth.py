@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify, session, redirect, url_for, rende
 
 from app.database import create_user, verify_user, get_user
 from app.affiliates import get_sea_affiliates, get_affiliate_ids, is_affiliates_loaded, is_affiliates_loading
+from app.extensions import limiter
 from app.utils import get_json_body, safe_audit
 
 auth_bp = Blueprint("auth", __name__)
@@ -72,6 +73,7 @@ def signup_page():
 # ──────────────────────── API ────────────────────────
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
+@limiter.limit("10 per minute; 50 per hour")
 def api_login():
     data = get_json_body()
     username = (data.get("username") or "").strip()
@@ -91,6 +93,7 @@ def api_login():
 
 
 @auth_bp.route("/api/auth/signup", methods=["POST"])
+@limiter.limit("5 per minute; 20 per hour")
 def api_signup():
     data = get_json_body()
     username = (data.get("username") or "").strip()
@@ -104,8 +107,8 @@ def api_signup():
         return jsonify({"error": "Username and password are required"}), 400
     if len(username) < 3 or len(username) > 30:
         return jsonify({"error": "Username must be 3-30 characters"}), 400
-    if len(password) < 6:
-        return jsonify({"error": "Password must be at least 6 characters"}), 400
+    if len(password) < 10:
+        return jsonify({"error": "Password must be at least 10 characters"}), 400
     if not roles or not isinstance(roles, list):
         return jsonify({"error": "Select at least one role"}), 400
 

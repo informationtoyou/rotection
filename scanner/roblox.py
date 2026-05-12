@@ -147,3 +147,69 @@ def get_sea_hrhc_user_ids(log=print) -> set:
         log(f"    [{ri+1}/{len(matching_roles)}] {role_name}: {role_count} members ({pages} page(s))")
 
     return hrhc_ids
+
+
+def get_user_group_roles(user_id: int) -> list[dict] | None:
+    """Return the group-role list for a user, or None on error."""
+    data = roblox_get(f"{ROBLOX_GROUPS_API}/v2/users/{user_id}/groups/roles")
+    if not data or "data" not in data:
+        return None
+    return data.get("data", [])
+
+
+def check_user_in_group(user_id: int, group_id: int) -> dict:
+    """Check if user is in the given group and return role info if present."""
+    roles = get_user_group_roles(user_id)
+    if not roles:
+        return {"in_group": False, "role": None, "role_id": None, "rank": None}
+    for entry in roles:
+        group = entry.get("group") or {}
+        if group.get("id") == group_id:
+            role = entry.get("role") or {}
+            return {
+                "in_group": True,
+                "role": role.get("name"),
+                "role_id": role.get("id"),
+                "rank": role.get("rank"),
+            }
+    return {"in_group": False, "role": None, "role_id": None, "rank": None}
+
+
+def batch_check_group_membership(user_records: dict, log=print, max_workers: int = 10, progress=None) -> dict:
+    """
+    Check group membership for each user record (uses record's group_id).
+    Returns dict keyed by uid_str -> membership info.
+    """
+    results = {}
+    if not user_records:
+        return results
+
+    users = list(user_records.values())
+    total = len(users)
+    checked = 0
+    results_lock = threading.Lock()
+
+    def _check(u):
+        uid = int(u["id"])
+        gid = int(u.get("group_id") or 0)
+        if gid <= 0:
+            return str(uid), {"in_group": False, "role": None, "role_id": None, "rank": None}
+        info = check_user_in_group(uid, gid)
+        return str(uid), info
+
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(users))) as executor:
+        futures = {executor.submit(_check, u): u for u in users}
+        for f in as_completed(futures):
+            try:
+                uid_str, info = f.result()
+                with results_lock:
+                    results[uid_str] = info
+                    checked += 1
+                    if progress:
+                        progress.users_checked = checked
+                if checked % 50 == 0:
+                    log(f"  Membership checked: {checked}/{total}")
+            except Exception:
+                pass
+
+    return results

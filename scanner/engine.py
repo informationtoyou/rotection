@@ -8,12 +8,15 @@ import traceback
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from scanner.constants import FLAG_TYPES, FLAGGED_FILE, WORKER_THREADS, SEA_MILITARY_GROUP_ID
+from scanner.constants import (
+    FLAG_TYPES, FLAGGED_FILE, WORKER_THREADS, SEA_MILITARY_GROUP_ID,
+    GROUP_SCAN_WORKERS, DISCORD_WORKERS, CHECK_GROUP_MEMBERSHIP, ROBLOX_MEMBERSHIP_WORKERS,
+)
 from scanner.progress import scan_progress
 from scanner.cache import save_scan, find_duplicate_scan
 from scanner.roblox import (
     get_group_info, get_allied_groups, get_enemy_groups, batch_get_user_info,
-    get_sea_hrhc_user_ids,
+    get_sea_hrhc_user_ids, batch_check_group_membership,
 )
 from scanner.rotector import (
     get_tracked_users_for_group, batch_lookup_users, get_discord_ids_for_user,
@@ -159,7 +162,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         groups_done_counter = [0]
 
         # cap threads to avoid CPU spikes on PythonAnywhere
-        group_workers = min(WORKER_THREADS, len(groups_to_scan), 10)
+        group_workers = min(WORKER_THREADS, GROUP_SCAN_WORKERS, len(groups_to_scan))
 
         def _scan_group(gi, group):
             gid = group["id"]
@@ -254,6 +257,39 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         # ---- phase 2.5: fill in ALL missing usernames from Roblox ----
         _fill_missing_display_names(all_user_records, p)
 
+        # ---- phase 2.6: check group membership (optional) ----
+        if CHECK_GROUP_MEMBERSHIP:
+            p.set_phase("Checking group membership", "Verifying if users are still in their group")
+            p.users_checked = 0
+            p.users_total = len(all_user_records)
+            p.log("Checking group membership for flagged users...")
+            try:
+                membership = batch_check_group_membership(
+                    all_user_records, log=p.log, max_workers=ROBLOX_MEMBERSHIP_WORKERS, progress=p
+                )
+                for uid_str, info in membership.items():
+                    rec = all_user_records.get(uid_str)
+                    if rec:
+                        rec["in_group"] = info.get("in_group")
+                        rec["group_role"] = info.get("role")
+                        rec["group_role_id"] = info.get("role_id")
+                        rec["group_rank"] = info.get("rank")
+            except Exception as exc:
+                p.log(f"  ⚠ Group membership check failed (non-fatal): {exc}")
+                for rec in all_user_records.values():
+                    rec["in_group"] = None
+                    rec["group_role"] = None
+                    rec["group_role_id"] = None
+                    rec["group_rank"] = None
+            p.progress = 42.0
+            p.update_eta()
+        else:
+            for rec in all_user_records.values():
+                rec["in_group"] = None
+                rec["group_role"] = None
+                rec["group_role_id"] = None
+                rec["group_rank"] = None
+
         # ---- phase 3: batch flag detail lookup (threaded) ----
         p.set_phase("Fetching flag details", "Looking up flag type, confidence, and reasons from Rotector")
         p.log("Batch-fetching flag details from Rotector...")
@@ -289,7 +325,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
 
         # ---- phase 4: discord ID resolution (threaded, capped for PythonAnywhere) ----
         p.set_phase("Resolving Discord accounts", "Looking up linked Discord IDs. This is the slowest part, please be patient")
-        discord_workers = min(WORKER_THREADS, 20)  # cap to avoid CPU spikes
+        discord_workers = min(WORKER_THREADS, DISCORD_WORKERS)  # cap to avoid CPU spikes
         p.log(f"Looking up Discord accounts ({discord_workers} threads)...")
 
         all_discord_ids = set()

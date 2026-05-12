@@ -15,6 +15,7 @@ var groupChartInstance = null;
 var flagChartInstance = null;
 var confChartInstance = null;
 var _pendingQueueId = null;
+var robloxConnection = null;
 
 var FLAG_MAP = {
   0:{name:'Unflagged',color:'#6b7280'}, 1:{name:'Flagged',color:'#ef4444'},
@@ -48,6 +49,23 @@ function canSetStatus() {
 }
 function canSeeInternalStatuses() { return canSetStatus(); }
 function isAdmin() { return currentUser && currentUser.is_admin; }
+function isDivisionLeader() { return currentUser && currentUser.roles.includes('Division Leader') && currentUser.division_confirmed; }
+function canManageDivision() { return isDivisionLeader(); }
+function hasRobloxConnection() { return robloxConnection && robloxConnection.connected; }
+
+function showNotification(msg, type) {
+  var existing = document.getElementById('_rotection_toast');
+  if (existing) existing.remove();
+  var el = document.createElement('div');
+  el.id = '_rotection_toast';
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;color:#fff;font-size:14px;z-index:9999;max-width:360px;box-shadow:0 4px 12px rgba(0,0,0,0.35);transition:opacity 0.3s;background:' + (type === 'error' ? '#dc2626' : '#16a34a');
+  document.body.appendChild(el);
+  setTimeout(function() {
+    el.style.opacity = '0';
+    setTimeout(function() { if (el.parentNode) el.remove(); }, 300);
+  }, 3500);
+}
 
 function fmtEta(seconds) {
   if (seconds == null || seconds <= 0) return '—';

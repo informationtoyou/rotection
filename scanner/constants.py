@@ -37,9 +37,25 @@ ROTECTOR_RATE_WINDOW = 10
 ROBLOX_RATE_LIMIT = 80
 ROBLOX_RATE_WINDOW = 10
 
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, default)))
+    except (TypeError, ValueError):
+        return default
+
+
 # -- threading --
-WORKER_THREADS = 50
+_cpu = os.cpu_count() or 2
+_default_workers = max(8, min(32, _cpu * 4))
+WORKER_THREADS = _env_int("WORKER_THREADS", _default_workers)
+GROUP_SCAN_WORKERS = _env_int("GROUP_SCAN_WORKERS", 10)
+DISCORD_WORKERS = _env_int("DISCORD_WORKERS", 20)
+ROBLOX_MEMBERSHIP_WORKERS = _env_int("ROBLOX_MEMBERSHIP_WORKERS", 15)
 MAX_RETRIES = 5
+
+# -- feature toggles / safety caps --
+CHECK_GROUP_MEMBERSHIP = os.getenv("CHECK_GROUP_MEMBERSHIP", "1").lower() in ("1", "true", "yes")
+ROBLOX_REMOVE_MAX = _env_int("ROBLOX_REMOVE_MAX", 200)
 
 # -- HTTP timeouts & retry behaviour --
 HTTP_TIMEOUT_ROTECTOR = 30      # seconds

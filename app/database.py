@@ -166,6 +166,39 @@ def init_db():
                 );
             """)
 
+        # ── Roblox OAuth connections (encrypted token storage) ──
+        db.executescript("""
+            CREATE TABLE IF NOT EXISTS roblox_connections (
+                user_id INTEGER PRIMARY KEY,
+                roblox_user_id INTEGER NOT NULL,
+                roblox_username TEXT NOT NULL,
+                cookie_enc TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                last_verified_at TEXT
+            );
+        """)
+
+        db.executescript("""
+            CREATE TABLE IF NOT EXISTS roblox_oauth (
+                user_id INTEGER PRIMARY KEY,
+                roblox_user_id INTEGER NOT NULL,
+                roblox_username TEXT NOT NULL,
+                access_token_enc TEXT NOT NULL,
+                refresh_token_enc TEXT,
+                scope TEXT,
+                token_type TEXT,
+                expires_at INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                last_verified_at TEXT,
+                last_in_group INTEGER DEFAULT 0
+            );
+        """)
+
+        # Add last_in_group column to roblox_oauth if it was created before this column existed
+        _roblox_oauth_cols = [r[1] for r in db.execute("PRAGMA table_info(roblox_oauth)").fetchall()]
+        if "last_in_group" not in _roblox_oauth_cols:
+            db.executescript("ALTER TABLE roblox_oauth ADD COLUMN last_in_group INTEGER DEFAULT 0;")
+
 
 def ensure_admin():
     """Create or update admin account from ADMIN_SECRET env var."""
@@ -318,7 +351,7 @@ def get_audit(limit: int = 200, since_ts: int | None = None) -> list[dict]:
         if since_ts:
             rows = db.execute("SELECT id, ts, actor_id, event_type, obj, details FROM audit WHERE ts >= ? ORDER BY ts DESC LIMIT ?", (since_ts, limit)).fetchall()
         else:
-            rows = db.execute("SELECT id, ts, actor_id, event_type, obj, details FROM audit ORDER BY ts DESC LIMIT ?", (limit)).fetchall()
+            rows = db.execute("SELECT id, ts, actor_id, event_type, obj, details FROM audit ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
     return [
         {"id": r["id"], "ts": r["ts"], "actor_id": r["actor_id"], "event_type": r["event_type"], "obj": r["obj"], "details": r["details"]}
         for r in rows
@@ -502,3 +535,78 @@ def get_all_user_statuses() -> dict:
         }
         for r in rows
     }
+
+
+# ──────────────────────── Roblox OAuth connections ────────────────────────
+
+def upsert_roblox_oauth(
+    user_id: int,
+    roblox_user_id: int,
+    roblox_username: str,
+    access_token_enc: str,
+    refresh_token_enc: str | None,
+    scope: str | None,
+    token_type: str | None,
+    expires_at: int | None,
+    last_in_group: bool,
+):
+    with get_db() as db:
+        db.execute(
+            """INSERT INTO roblox_oauth
+               (user_id, roblox_user_id, roblox_username, access_token_enc, refresh_token_enc,
+                scope, token_type, expires_at, last_verified_at, last_in_group)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+               ON CONFLICT(user_id) DO UPDATE SET
+                   roblox_user_id     = excluded.roblox_user_id,
+                   roblox_username    = excluded.roblox_username,
+                   access_token_enc   = excluded.access_token_enc,
+                   refresh_token_enc  = excluded.refresh_token_enc,
+                   scope              = excluded.scope,
+                   token_type         = excluded.token_type,
+                   expires_at         = excluded.expires_at,
+                   last_verified_at   = datetime('now'),
+                   last_in_group      = excluded.last_in_group""",
+            (
+                user_id,
+                roblox_user_id,
+                roblox_username,
+                access_token_enc,
+                refresh_token_enc,
+                scope,
+                token_type,
+                expires_at,
+                1 if last_in_group else 0,
+            ),
+        )
+
+
+def get_roblox_oauth(user_id: int, include_secret: bool = False) -> dict | None:
+    with get_db() as db:
+        row = db.execute(
+            "SELECT user_id, roblox_user_id, roblox_username, access_token_enc, refresh_token_enc, "
+            "scope, token_type, expires_at, created_at, last_verified_at, last_in_group "
+            "FROM roblox_oauth WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+    if not row:
+        return None
+    data = {
+        "user_id": row["user_id"],
+        "roblox_user_id": row["roblox_user_id"],
+        "roblox_username": row["roblox_username"],
+        "scope": row["scope"],
+        "token_type": row["token_type"],
+        "expires_at": row["expires_at"],
+        "created_at": row["created_at"],
+        "last_verified_at": row["last_verified_at"],
+        "last_in_group": bool(row["last_in_group"]),
+    }
+    if include_secret:
+        data["access_token_enc"] = row["access_token_enc"]
+        data["refresh_token_enc"] = row["refresh_token_enc"]
+    return data
+
+
+def delete_roblox_oauth(user_id: int):
+    with get_db() as db:
+        db.execute("DELETE FROM roblox_oauth WHERE user_id = ?", (user_id,))

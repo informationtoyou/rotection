@@ -19,17 +19,31 @@ async function loadCurrentUser() {
     if (currentUser.is_admin) {
       document.getElementById('adminTab').style.display = '';
     }
+    var isDivLeaderRole = currentUser.roles.includes('Division Leader');
+    if (isDivLeaderRole) {
+      await loadRobloxStatus();
+    }
+
     // show pending banner if needed
     var needsConfirm = false;
     if (currentUser.roles.includes('Division Administrator') && !currentUser.admin_confirmed) needsConfirm = true;
-    if (currentUser.roles.includes('Division Leader') && !currentUser.division_confirmed) needsConfirm = true;
+    if (isDivLeaderRole && !currentUser.division_confirmed) needsConfirm = true;
     if (currentUser.roles.includes('Moderator at a division')) {
       var confirmed = currentUser.divisions_mod_confirmed || [];
       var requested = currentUser.divisions_moderating || [];
       if (confirmed.length < requested.length) needsConfirm = true;
     }
     if (needsConfirm) {
-      document.getElementById('pendingBanner').style.display = 'flex';
+      var banner = document.getElementById('pendingBanner');
+      var msgEl = document.getElementById('pendingMessage');
+      var verifyBtn = document.getElementById('verifyRobloxBtn');
+      banner.style.display = 'flex';
+      if (isDivLeaderRole && !currentUser.division_confirmed && robloxConnection && robloxConnection.oauth_configured) {
+        msgEl.textContent = 'Your Division Leader access is pending. You can verify instantly with Roblox.';
+        verifyBtn.style.display = 'inline-flex';
+      } else {
+        verifyBtn.style.display = 'none';
+      }
     }
     // show division quick scan button for Division Leaders (confirmed)
     if (currentUser.division_group_id && currentUser.division_confirmed) {
@@ -47,4 +61,18 @@ async function loadCurrentUser() {
     window.location.href = '/login';
     return null;
   }
+}
+
+async function loadRobloxStatus() {
+  try {
+    var resp = await fetch(API_BASE + '/api/roblox/status');
+    if (!resp.ok) { robloxConnection = null; return; }
+    robloxConnection = await resp.json();
+  } catch(e) {
+    robloxConnection = null;
+  }
+}
+
+function startRobloxVerify() {
+  window.location.href = '/api/roblox/oauth/start';
 }

@@ -16,6 +16,11 @@ function showUserDetail(userId) {
   h += '<div class="detail-row"><div class="detail-label">Confidence</div><div>' + (u.confidence ? Math.round(u.confidence*100)+'%' : 'N/A') + '</div></div>';
   h += '<div class="detail-row"><div class="detail-label">Status</div><div><span class="user-status-badge ' + stCss + '">' + esc(uStatus) + '</span>' + (stObj && stObj.set_by ? ' <span class="text-muted text-xs">by ' + esc(stObj.set_by) + '</span>' : '') + '</div></div>';
   h += '<div class="detail-row"><div class="detail-label">Group</div><div>' + esc(u.group_name||'?') + '</div></div>';
+  if (u.in_group !== undefined && u.in_group !== null) {
+    var inGroupTxt = u.in_group ? 'Yes' : 'No';
+    var roleTxt = u.group_role ? (' (' + esc(u.group_role) + ')') : '';
+    h += '<div class="detail-row"><div class="detail-label">In Group</div><div>' + inGroupTxt + roleTxt + '</div></div>';
+  }
   h += '<div class="detail-row"><div class="detail-label">Active</div><div>' + (u.isActive ? 'Yes' : 'No') + '</div></div>';
 
   if (u.all_groups && u.all_groups.length) {

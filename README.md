@@ -38,6 +38,14 @@ Optionally, create a `.env` file in the project root:
 ```
 API_KEY_HEADER=your_rotector_api_key_here
 ADMIN_SECRET=whatever_admin_password_you_want
+ROTECTION_ENCRYPTION_KEY=your_random_encryption_key
+ROBLOX_OAUTH_CLIENT_ID=your_roblox_client_id
+ROBLOX_OAUTH_CLIENT_SECRET=your_roblox_client_secret
+ROBLOX_OAUTH_REDIRECT_URI=https://your-domain.com/api/roblox/oauth/callback
+ROBLOX_OAUTH_AUTHORIZE_URL=https://apis.roblox.com/oauth/v1/authorize
+ROBLOX_OAUTH_TOKEN_URL=https://apis.roblox.com/oauth/v1/token
+ROBLOX_OAUTH_USERINFO_URL=https://apis.roblox.com/oauth/v1/userinfo
+ROBLOX_OAUTH_SCOPE=openid profile
 ```
 
 You get the API key from Rotector. Without it, the scanner can't fetch flag data. Rotector API keys are not available to the public at the moment without contacting the owner of Rotector. The owner of Rotector was kind enough to give me one, which is being used at https://rotection.pythonanywhere.com/.
@@ -138,6 +146,8 @@ Rotection/
 - **Scan history** : load any previous scan from the History tab
 - **Group navigation**: click group buttons to filter by specific affiliated groups
 - **Deploy banner**: GitHub Actions notifies the site before deploying; users see a banner and the deploy waits for any running scan to finish
+- **Group membership check**: shows whether a flagged user is still in the group
+- **Division Leader tools**: verify via Roblox OAuth and remove flagged users from your division
 
 ## Rate limits
 
