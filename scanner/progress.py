@@ -16,6 +16,8 @@ class ScanProgress:
         self.phase_description = ""
         self.logs: list[str] = []
         self.progress = 0.0
+        self.work_done = 0.0
+        self.work_total = 0.0
         self.current_group = ""
         self.groups_done = 0
         self.groups_total = 0
@@ -36,6 +38,8 @@ class ScanProgress:
             self.phase_description = ""
             self.logs = []
             self.progress = 0.0
+            self.work_done = 0.0
+            self.work_total = 0.0
             self.current_group = ""
             self.groups_done = 0
             self.groups_total = 0
@@ -65,18 +69,52 @@ class ScanProgress:
             self.phase = phase
             self.phase_description = description
 
+    def set_work(self, done: float = 0.0, total: float = 0.0):
+        with self.lock:
+            self.work_done = max(0.0, float(done))
+            self.work_total = max(0.0, float(total))
+            self._update_progress_locked()
+
+    def add_work_total(self, units: float):
+        if units <= 0:
+            return
+        with self.lock:
+            self.work_total += float(units)
+            self._update_progress_locked()
+
+    def advance_work(self, units: float = 1.0):
+        if units <= 0:
+            return
+        with self.lock:
+            self.work_done += float(units)
+            if self.work_done > self.work_total:
+                self.work_total = self.work_done
+            self._update_progress_locked()
+
+    def _update_progress_locked(self):
+        if self.work_total <= 0:
+            self.progress = 0.0
+        else:
+            calculated = min(99.0, (self.work_done / self.work_total) * 100)
+            # Work can be discovered during a scan. Never move the visible bar backwards.
+            self.progress = max(self.progress, calculated)
+        self._update_eta_locked()
+
     def update_eta(self):
         with self.lock:
-            if not self.start_time or self.progress <= 0:
-                self.eta_seconds = None
-                return
-            elapsed = time.time() - self.start_time
-            if self.progress >= 100:
-                self.eta_seconds = 0
-                return
-            rate = elapsed / self.progress
-            remaining = (100 - self.progress) * rate
-            self.eta_seconds = remaining
+            self._update_eta_locked()
+
+    def _update_eta_locked(self):
+        if not self.start_time or self.progress <= 0:
+            self.eta_seconds = None
+            return
+        elapsed = time.time() - self.start_time
+        if self.progress >= 100:
+            self.eta_seconds = 0
+            return
+        rate = elapsed / self.progress
+        remaining = (100 - self.progress) * rate
+        self.eta_seconds = remaining
 
     def to_dict(self, log_cursor: int = 0) -> dict:
         with self.lock:
@@ -89,6 +127,8 @@ class ScanProgress:
                 "log_count": len(all_logs),
                 "logs": new_logs,
                 "progress": round(self.progress, 1),
+                "work_done": round(self.work_done, 1),
+                "work_total": round(self.work_total, 1),
                 "current_group": self.current_group,
                 "groups_done": self.groups_done,
                 "groups_total": self.groups_total,

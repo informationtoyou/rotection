@@ -1,4 +1,9 @@
 // Admin Panel Script
+var _adminUsersCache = [];
+
+function _getAdminUser(userId) {
+  return _adminUsersCache.find(function(u) { return u.id === userId; }) || null;
+}
 
 // ──────────────────── User detail modal ────────────────────
 function showUserDetail(userId) {
@@ -41,7 +46,7 @@ function showUserDetail(userId) {
     h += '<h4 class="modal-section-title">Linked Discord Accounts</h4>';
     u.discord_accounts.forEach(function(d) {
       h += '<div class="detail-discord-item"><span class="discord-id">' + safeDiscordId(d.id) + '</span>';
-      if (d.sources && d.sources.length) h += ' <span class="text-muted text-xs">via ' + d.sources.join(', ') + '</span>';
+      if (d.sources && d.sources.length) h += ' <span class="text-muted text-xs">via ' + d.sources.map(esc).join(', ') + '</span>';
       h += '</div>';
     });
   }
@@ -143,6 +148,7 @@ async function loadAdminUsers() {
     var resp = await fetch(API_BASE + '/api/admin/users');
     if (!resp.ok) { el.innerHTML = '<div class="empty-state"><p>Access denied</p></div>'; return; }
     var users = await resp.json();
+    _adminUsersCache = users;
     if (!users.length) { el.innerHTML = '<div class="empty-state"><p>No users registered yet.</p></div>'; return; }
     var html = '';
     users.forEach(function(u) {
@@ -156,7 +162,7 @@ async function loadAdminUsers() {
         html += ' <span class="admin-badge ' + (u.division_confirmed ? 'admin-badge-confirmed' : 'admin-badge-pending') + '">' + esc(u.division_name) + '</span>';
       }
       html += '</div>';
-      html += '<div class="au-roles">' + u.roles.join(', ') + '</div>';
+      html += '<div class="au-roles">' + u.roles.map(esc).join(', ') + '</div>';
       if (u.divisions_moderating && u.divisions_moderating.length) {
         html += '<div style="margin-top:4px">';
         var confirmed = u.divisions_mod_confirmed || [];
@@ -172,7 +178,7 @@ async function loadAdminUsers() {
       html += '<div class="au-actions">';
       if (!u.is_admin) {
         html += '<button class="btn btn-secondary btn-sm" onclick="openAdminEditModal(' + u.id + ')">Edit</button>';
-        html += '<button class="btn btn-danger btn-sm" onclick="adminDeleteUser(' + u.id + ',\'' + esc(u.username) + '\')">Delete</button>';
+        html += '<button class="btn btn-danger btn-sm" onclick="adminDeleteUser(' + u.id + ')">Delete</button>';
       }
       html += '</div>';
       html += '</div>';
@@ -185,9 +191,12 @@ var _adminEditUserId = null;
 async function openAdminEditModal(userId) {
   _adminEditUserId = userId;
   try {
-    var resp = await fetch(API_BASE + '/api/admin/users');
-    var users = await resp.json();
-    var u = users.find(function(x) { return x.id === userId; });
+    var u = _getAdminUser(userId);
+    if (!u) {
+      var resp = await fetch(API_BASE + '/api/admin/users');
+      _adminUsersCache = await resp.json();
+      u = _getAdminUser(userId);
+    }
     if (!u) return;
 
     document.getElementById('adminModalTitle').textContent = 'Edit — ' + u.username;
@@ -282,7 +291,9 @@ async function saveAdminRoles(userId) {
   } catch(e) { alert('Network error'); }
 }
 
-async function adminDeleteUser(userId, username) {
+async function adminDeleteUser(userId) {
+  var user = _getAdminUser(userId);
+  var username = user ? user.username : ('user ' + userId);
   if (!confirm('Delete user "' + username + '"? This cannot be undone.')) return;
   try {
     var resp = await fetch(API_BASE + '/api/admin/users/' + userId, { method: 'DELETE' });
@@ -316,7 +327,7 @@ async function loadAudit(limit = 200) {
       var details = esc(r.details || '');
       html += '<div class="audit-row">';
       html += '<div class="audit-time">' + timeStr + '</div>';
-      html += '<div class="audit-actor">' + actor + '</div>';
+      html += '<div class="audit-actor">' + esc(actor) + '</div>';
       html += '<div class="audit-evt">' + evt + '</div>';
       html += '<div class="audit-obj">' + obj + '</div>';
       html += '<div class="audit-details">' + (details ? details : '') + '</div>';

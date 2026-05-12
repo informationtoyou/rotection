@@ -4,6 +4,8 @@ HTTP sessions and low-level request helpers with rate limiting, retries, and 429
 
 import requests
 import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 from scanner.constants import (
     ROTECTOR_BASE, API_KEY_HEADER, WORKER_THREADS, MAX_RETRIES,
@@ -11,35 +13,50 @@ from scanner.constants import (
     ROBLOX_RATE_LIMIT, ROBLOX_RATE_WINDOW,
     HTTP_TIMEOUT_ROTECTOR, HTTP_TIMEOUT_ROBLOX,
     HTTP_RETRY_SLEEP, HTTP_RETRY_AFTER_DEFAULT,
+    DISCORD_WORKERS, GROUP_SCAN_WORKERS, ROBLOX_MEMBERSHIP_WORKERS,
 )
 from scanner.rate_limiter import RateLimiter
 
 # -- rate limiters --
 rotector_limiter = RateLimiter(ROTECTOR_RATE_LIMIT, ROTECTOR_RATE_WINDOW)
 roblox_limiter = RateLimiter(ROBLOX_RATE_LIMIT, ROBLOX_RATE_WINDOW)
+_pool_size = max(WORKER_THREADS, DISCORD_WORKERS, GROUP_SCAN_WORKERS, ROBLOX_MEMBERSHIP_WORKERS)
 
 # -- persistent sessions for connection reuse (HTTP keep-alive) --
 _rotector_session = requests.Session()
 _rotector_session.headers.update({"X-Auth-Token": API_KEY_HEADER or ""})
 _rotector_session.mount("https://", requests.adapters.HTTPAdapter(
-    pool_connections=WORKER_THREADS, pool_maxsize=WORKER_THREADS, max_retries=0,
+    pool_connections=_pool_size, pool_maxsize=_pool_size, max_retries=0, pool_block=True,
 ))
 
 _roblox_session = requests.Session()
 _roblox_session.mount("https://", requests.adapters.HTTPAdapter(
-    pool_connections=WORKER_THREADS, pool_maxsize=WORKER_THREADS, max_retries=0,
+    pool_connections=_pool_size, pool_maxsize=_pool_size, max_retries=0, pool_block=True,
 ))
 
 
 def _parse_retry_after(headers: dict) -> int:
-    """Parse the Retry-After header, falling back to the default if missing or non-integer."""
+    """Parse seconds or HTTP-date Retry-After values, falling back to the default."""
     raw = headers.get("Retry-After")
     if raw is not None:
         try:
-            return int(raw)
-        except ValueError:
-            pass
+            return max(0, int(raw))
+        except (TypeError, ValueError):
+            try:
+                retry_at = parsedate_to_datetime(raw)
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=timezone.utc)
+                return max(0, int((retry_at - datetime.now(timezone.utc)).total_seconds()))
+            except (TypeError, ValueError, IndexError, OverflowError):
+                pass
     return HTTP_RETRY_AFTER_DEFAULT
+
+
+def _json_or_none(resp: requests.Response) -> dict | None:
+    try:
+        return resp.json()
+    except ValueError:
+        return None
 
 
 def _request_with_retry(
@@ -67,9 +84,9 @@ def _request_with_retry(
                 continue
             if raise_for_status:
                 resp.raise_for_status()
-                return resp.json()
+                return _json_or_none(resp)
             if resp.status_code == 200:
-                return resp.json()
+                return _json_or_none(resp)
             return None
         except requests.RequestException:
             if attempt < MAX_RETRIES - 1:

@@ -22,6 +22,14 @@ ROLE_OPTIONS = [
 ]
 
 
+def _positive_int(value):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 def login_required(f):
     """Decorator: redirect to login if not authenticated."""
     @functools.wraps(f)
@@ -122,10 +130,11 @@ def api_signup():
     affiliate_ids = get_affiliate_ids()
 
     # if Division Leader, require division info
+    division_group_int = _positive_int(division_group_id)
     if "Division Leader" in roles:
-        if not division_group_id or not division_name:
+        if not division_group_int or not division_name:
             return jsonify({"error": "Division Leaders must select their division"}), 400
-        if affiliate_ids and int(division_group_id) not in affiliate_ids:
+        if affiliate_ids and division_group_int not in affiliate_ids:
             return jsonify({"error": "Invalid division selected"}), 400
 
     # if Moderator at a division, require divisions
@@ -134,7 +143,7 @@ def api_signup():
             return jsonify({"error": "Division Moderators must select their divisions"}), 400
         if affiliate_ids:
             for div in divisions_moderating:
-                if int(div.get("id", 0)) not in affiliate_ids:
+                if _positive_int(div.get("id")) not in affiliate_ids:
                     return jsonify({"error": f"Invalid division: {div.get('name', '?')}"}), 400
 
     # prevent creating 'admin' account via signup
@@ -145,7 +154,7 @@ def api_signup():
         username=username,
         password=password,
         roles=roles,
-        division_group_id=int(division_group_id) if division_group_id else None,
+        division_group_id=division_group_int,
         division_name=division_name,
         divisions_moderating=divisions_moderating,
     )

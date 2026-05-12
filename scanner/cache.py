@@ -32,6 +32,7 @@ def _get_conn() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=5000")
         _local.conn = conn
     return conn
 
@@ -158,12 +159,17 @@ def get_previous_scans() -> list[dict]:
     conn = _get_conn()
     rows = conn.execute(
         """SELECT id, timestamp, primary_group_id, primary_group_name,
-                  include_allies, include_enemies,
-                  total_flagged, total_discord_ids, requested_by
+                  include_allies, include_enemies, total_flagged,
+                  total_discord_ids, requested_by, data
            FROM scans ORDER BY rowid DESC"""
     ).fetchall()
     summaries = []
     for r in rows:
+        groups_scanned = 0
+        try:
+            groups_scanned = len(json.loads(r["data"]).get("groups", {}))
+        except Exception:
+            pass
         summaries.append({
             "id": r["id"],
             "timestamp": r["timestamp"],
@@ -172,21 +178,10 @@ def get_previous_scans() -> list[dict]:
             "include_allies": bool(r["include_allies"]),
             "include_enemies": bool(r["include_enemies"]),
             "requested_by": r["requested_by"] or "",
-            "groups_scanned": 0,  # filled below if needed
+            "groups_scanned": groups_scanned,
             "total_flagged": r["total_flagged"],
             "total_discord_ids": r["total_discord_ids"],
         })
-    # fill in groups_scanned from the JSON blob (cheap parse of just that key)
-    # only for the summaries — we avoid loading the full blob here
-    for summary in summaries:
-        conn2 = _get_conn()
-        row = conn2.execute("SELECT data FROM scans WHERE id = ?", (summary["id"],)).fetchone()
-        if row:
-            try:
-                full = json.loads(row["data"])
-                summary["groups_scanned"] = len(full.get("groups", {}))
-            except Exception:
-                pass
     return summaries
 
 
@@ -254,6 +249,7 @@ def find_duplicate_scan(primary_group_id: int, include_allies: bool,
            WHERE primary_group_id = ?
              AND include_allies = ?
              AND include_enemies = ?
+           ORDER BY rowid DESC
            LIMIT 1""",
         (primary_group_id, int(include_allies), int(include_enemies)),
     ).fetchone()

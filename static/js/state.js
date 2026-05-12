@@ -35,10 +35,23 @@ var ROLE_OPTIONS = ['SEA Moderator','Division Administrator','Division Leader','
 var SEA_GROUP_ID = 2648601;
 
 var SAFE_THUMB_PREFIX = 'https://tr.rbxcdn.com/';
+var _escapeNode = document.createElement('div');
 
-function safeThumbnail(url) { if (!url) return ''; return url.startsWith(SAFE_THUMB_PREFIX) ? esc(url) : ''; }
-function safeDiscordId(id) { return /^\d+$/.test(id) ? id : esc(id); }
-function esc(s) { var d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+function safeThumbnail(url) {
+  if (!url) return '';
+  var value = String(url);
+  return value.startsWith(SAFE_THUMB_PREFIX) ? esc(value) : '';
+}
+function safeDiscordId(id) {
+  var value = String(id || '');
+  return /^\d+$/.test(value) ? value : esc(value);
+}
+function esc(s) {
+  _escapeNode.textContent = s == null ? '' : String(s);
+  var escaped = _escapeNode.innerHTML;
+  _escapeNode.textContent = '';
+  return escaped;
+}
 
 function canSetStatus() {
   if (!currentUser) return false;

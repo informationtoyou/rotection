@@ -19,10 +19,19 @@ from scanner.roblox import (
     get_sea_hrhc_user_ids, batch_check_group_membership,
 )
 from scanner.rotector import (
-    get_tracked_users_for_group, batch_lookup_users, get_discord_ids_for_user,
+    get_tracked_users_for_group, batch_lookup_users, batch_get_discord_ids_for_users,
 )
 
 _scan_lock = threading.Lock()
+
+DISCOVERY_WORK_UNIT = 1
+GROUP_SCAN_WORK_UNIT = 1
+HRHC_WORK_UNIT = 1
+NAME_LOOKUP_WORK_UNIT = 1
+MEMBERSHIP_WORK_UNIT = 1
+FLAG_DETAIL_WORK_UNIT = 1
+DISCORD_LOOKUP_WORK_UNIT = 1
+SAVE_WORK_UNIT = 1
 
 
 def _fill_missing_display_names(user_records: dict, p=None) -> None:
@@ -44,6 +53,8 @@ def _fill_missing_display_names(user_records: dict, p=None) -> None:
     ]
     if missing_names:
         if p:
+            p.add_work_total(len(missing_names) * NAME_LOOKUP_WORK_UNIT)
+        if p:
             p.set_phase("Resolving usernames", f"Fetching names for {len(missing_names)} users from Roblox")
         _log(f"Fetching usernames for {len(missing_names)} users missing name data...")
         name_data = batch_get_user_info(missing_names)
@@ -57,6 +68,8 @@ def _fill_missing_display_names(user_records: dict, p=None) -> None:
                 if not rec.get("displayName"):
                     rec["displayName"] = info.get("displayName", "")
         _log(f"  Filled in {filled} usernames from Roblox")
+        if p:
+            p.advance_work(len(missing_names) * NAME_LOOKUP_WORK_UNIT)
 
     # Pass 2: have a name but missing displayName
     missing_display = [
@@ -64,11 +77,15 @@ def _fill_missing_display_names(user_records: dict, p=None) -> None:
         if rec.get("name") and not rec.get("displayName")
     ]
     if missing_display:
+        if p:
+            p.add_work_total(len(missing_display) * NAME_LOOKUP_WORK_UNIT)
         _log(f"Fetching display names for {len(missing_display)} users...")
         display_data = batch_get_user_info(missing_display)
         for uid_str, info in display_data.items():
             if uid_str in user_records and not user_records[uid_str].get("displayName"):
                 user_records[uid_str]["displayName"] = info.get("displayName", "")
+        if p:
+            p.advance_work(len(missing_display) * NAME_LOOKUP_WORK_UNIT)
 
 
 def is_scanning() -> bool:
@@ -98,6 +115,12 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
     p.start_time = time.time()
     scan_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     p.scan_id = scan_id
+    discovery_units = (
+        DISCOVERY_WORK_UNIT
+        + (DISCOVERY_WORK_UNIT if include_allies else 0)
+        + (DISCOVERY_WORK_UNIT if include_enemies else 0)
+    )
+    discovery_done = 0
 
     try:
         # ---- phase 1: group discovery ----
@@ -105,6 +128,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         p.log(f"Target group: {primary_group_id}")
 
         primary_info = get_group_info(primary_group_id)
+        discovery_done += DISCOVERY_WORK_UNIT
         primary_name = primary_info["name"] if primary_info else f"Group {primary_group_id}"
         p.log(f"  Name: {primary_name}")
 
@@ -128,11 +152,13 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                         allies = fetch_tasks["allies"].result()
                     except Exception:
                         allies = []
+                    discovery_done += DISCOVERY_WORK_UNIT
                 if "enemies" in fetch_tasks:
                     try:
                         enemies = fetch_tasks["enemies"].result()
                     except Exception:
                         enemies = []
+                    discovery_done += DISCOVERY_WORK_UNIT
 
         if include_allies:
             p.log(f"  Found {len(allies)} allies")
@@ -151,8 +177,14 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                     p.log(f"    ⚔ {e['name']} ({e['memberCount']} members)")
 
         p.groups_total = len(groups_to_scan)
-        p.progress = 5.0
-        p.update_eta()
+        scanning_sea = any(g["id"] == SEA_MILITARY_GROUP_ID for g in groups_to_scan)
+        initial_work_total = (
+            discovery_units
+            + len(groups_to_scan) * GROUP_SCAN_WORK_UNIT
+            + (HRHC_WORK_UNIT if scanning_sea else 0)
+            + SAVE_WORK_UNIT
+        )
+        p.set_work(discovery_done, initial_work_total)
 
         # ---- phase 2: pull tracked users from each group (threaded) ----
         p.set_phase("Scanning groups", "Pulling tracked users from Rotector for each group (parallel)")
@@ -194,9 +226,11 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
             }
 
             with group_scan_lock:
+                new_user_count = 0
                 for uid_str, record in local_records.items():
                     if uid_str not in all_user_records:
                         all_user_records[uid_str] = record
+                        new_user_count += 1
                     else:
                         existing = all_user_records[uid_str]
                         if "all_groups" not in existing:
@@ -206,12 +240,18 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                 group_results[str(gid)] = local_group_result
                 groups_done_counter[0] += 1
                 done = groups_done_counter[0]
+                total_unique = len(all_user_records)
+
+            if new_user_count:
+                per_user_work = FLAG_DETAIL_WORK_UNIT + DISCORD_LOOKUP_WORK_UNIT
+                if CHECK_GROUP_MEMBERSHIP:
+                    per_user_work += MEMBERSHIP_WORK_UNIT
+                p.add_work_total(new_user_count * per_user_work)
 
             p.current_group = gname
             p.groups_done = done
-            p.progress = 5 + done / len(groups_to_scan) * 25
-            p.flagged_found = len(all_user_records)
-            p.update_eta()
+            p.flagged_found = total_unique
+            p.advance_work(GROUP_SCAN_WORK_UNIT)
 
         with ThreadPoolExecutor(max_workers=group_workers) as executor:
             futures = [executor.submit(_scan_group, gi, group) for gi, group in enumerate(groups_to_scan)]
@@ -229,7 +269,6 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         p.log(f"Total unique tracked users: {len(all_user_records)}")
 
         # ---- phase 2.4: tag SEA Military HR/HC users (~15 API calls, rate-limited) ----
-        scanning_sea = any(g["id"] == SEA_MILITARY_GROUP_ID for g in groups_to_scan)
         if scanning_sea:
             p.set_phase("Tagging HR/HC ranks", "Fetching SEA Military role members from Roblox (rate-limited, may take a moment)")
             p.log("Tagging SEA Military HR/HC ranks...")
@@ -247,12 +286,10 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                 p.log(f"  ⚠ HR/HC tagging failed (non-fatal): {exc}")
                 for rec in all_user_records.values():
                     rec["is_sea_hrhc"] = False
+            p.advance_work(HRHC_WORK_UNIT)
         else:
             for rec in all_user_records.values():
                 rec["is_sea_hrhc"] = False
-
-        p.progress = 32.0
-        p.update_eta()
 
         # ---- phase 2.5: fill in ALL missing usernames from Roblox ----
         _fill_missing_display_names(all_user_records, p)
@@ -265,7 +302,11 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
             p.log("Checking group membership for flagged users...")
             try:
                 membership = batch_check_group_membership(
-                    all_user_records, log=p.log, max_workers=ROBLOX_MEMBERSHIP_WORKERS, progress=p
+                    all_user_records,
+                    log=p.log,
+                    max_workers=ROBLOX_MEMBERSHIP_WORKERS,
+                    progress=p,
+                    progress_callback=lambda units: p.advance_work(units * MEMBERSHIP_WORK_UNIT),
                 )
                 for uid_str, info in membership.items():
                     rec = all_user_records.get(uid_str)
@@ -281,8 +322,7 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                     rec["group_role"] = None
                     rec["group_role_id"] = None
                     rec["group_rank"] = None
-            p.progress = 42.0
-            p.update_eta()
+                p.advance_work(len(all_user_records) * MEMBERSHIP_WORK_UNIT)
         else:
             for rec in all_user_records.values():
                 rec["in_group"] = None
@@ -295,18 +335,28 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
         p.log("Batch-fetching flag details from Rotector...")
 
         all_ids = [int(uid) for uid in all_user_records.keys()]
-        flag_details = batch_lookup_users(all_ids, log=p.log)
+        try:
+            flag_details = batch_lookup_users(
+                all_ids,
+                log=p.log,
+                progress_callback=lambda units: p.advance_work(units * FLAG_DETAIL_WORK_UNIT),
+            )
+        except Exception as exc:
+            p.log(f"  Warning: flag detail lookup failed: {exc}")
+            flag_details = {}
+            p.advance_work(len(all_ids) * FLAG_DETAIL_WORK_UNIT)
 
         for uid_str, details in flag_details.items():
             if uid_str in all_user_records:
                 ft = details.get("flagType", 0)
                 if isinstance(ft, str):
                     ft = int(ft)
+                flag_meta = FLAG_TYPES.get(ft, {})
                 rec = all_user_records[uid_str]
                 rec["flagType"] = ft
-                rec["flagName"] = FLAG_TYPES.get(ft, {}).get("name", "Unknown")
-                rec["flagColor"] = FLAG_TYPES.get(ft, {}).get("color", "#6b7280")
-                rec["actionable"] = FLAG_TYPES.get(ft, {}).get("actionable", False)
+                rec["flagName"] = flag_meta.get("name", "Unknown")
+                rec["flagColor"] = flag_meta.get("color", "#6b7280")
+                rec["actionable"] = flag_meta.get("actionable", False)
                 rec["confidence"] = details.get("confidence", 0)
                 reasons = details.get("reasons", {})
                 reason_list = []
@@ -320,54 +370,45 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
                 rec["reasons"] = reason_list
                 rec["lastUpdated"] = details.get("lastUpdated")
 
-        p.progress = 55.0
-        p.update_eta()
-
         # ---- phase 4: discord ID resolution (threaded, capped for PythonAnywhere) ----
         p.set_phase("Resolving Discord accounts", "Looking up linked Discord IDs. This is the slowest part, please be patient")
-        discord_workers = min(WORKER_THREADS, DISCORD_WORKERS)  # cap to avoid CPU spikes
-        p.log(f"Looking up Discord accounts ({discord_workers} threads)...")
+        p.users_checked = 0
+        p.users_total = len(all_user_records)
 
         all_discord_ids = set()
         user_list = list(all_user_records.values())
-        discord_lock = threading.Lock()
+        discord_workers = min(DISCORD_WORKERS, max(len(user_list), 1))
+        p.log(f"Looking up Discord accounts ({discord_workers} threads)...")
         checked_counter = [0]
 
-        def _lookup_discord(user):
-            uid = user["id"]
-            discord_data = get_discord_ids_for_user(uid)
-            dids = discord_data["discord_ids"]
-            alts = discord_data["alt_accounts"]
+        def _discord_progress(units):
+            checked_counter[0] += units
+            p.users_checked = checked_counter[0]
+            p.advance_work(units * DISCORD_LOOKUP_WORK_UNIT)
+
+        discord_results = batch_get_discord_ids_for_users(
+            [u["id"] for u in user_list],
+            log=p.log,
+            max_workers=discord_workers,
+            progress_callback=_discord_progress,
+        )
+
+        for count, user in enumerate(user_list, start=1):
+            if p.cancelled:
+                p.log("Scan cancelled")
+                p.status = "cancelled"
+                return
+            discord_data = discord_results.get(str(user["id"]), {})
+            dids = discord_data.get("discord_ids", [])
             user["discord_accounts"] = dids
-            user["alt_accounts"] = alts
-            with discord_lock:
-                for d in dids:
-                    all_discord_ids.add(d["id"])
-                checked_counter[0] += 1
-                count = checked_counter[0]
-            return uid, len(dids), count
-
-        with ThreadPoolExecutor(max_workers=discord_workers) as executor:
-            futures = {executor.submit(_lookup_discord, u): u for u in user_list}
-            for future in as_completed(futures):
-                if p.cancelled:
-                    p.log("Scan cancelled")
-                    p.status = "cancelled"
-                    return
-
-                try:
-                    _, n_dids, count = future.result()
-                    p.users_checked = count
-                    p.discord_ids_found = len(all_discord_ids)
-                    p.progress = 55 + (count / max(len(user_list), 1)) * 40
-                    p.update_eta()
-                    if n_dids > 0:
-                        u = futures[future]
-                        p.log(f"  [{count}/{len(user_list)}] {u['name']}: {n_dids} Discord ID(s)")
-                    elif count % 50 == 0:
-                        p.log(f"  ... {count}/{len(user_list)} users checked")
-                except Exception:
-                    pass
+            user["alt_accounts"] = discord_data.get("alt_accounts", [])
+            for d in dids:
+                all_discord_ids.add(d["id"])
+            p.discord_ids_found = len(all_discord_ids)
+            if dids:
+                p.log(f"  [{count}/{len(user_list)}] {user['name']}: {len(dids)} Discord ID(s)")
+            elif count % 250 == 0:
+                p.log(f"  ... {count}/{len(user_list)} Discord results applied")
 
         # ---- phase 5: final username sweep for any still missing ----
         p.log("Final username sweep for any remaining users...")
@@ -375,7 +416,6 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
 
         # ---- phase 6: saving ----
         p.set_phase("Saving results", "Writing flagged.txt and updating scan cache")
-        p.progress = 97.0
 
         unique_discord_ids = sorted(all_discord_ids)
         with open(FLAGGED_FILE, "w") as f:
@@ -403,8 +443,10 @@ def _scan_worker(primary_group_id: int, include_allies: bool, include_enemies: b
             delete_scan_by_id(dup_id)
 
         save_scan(scan_result)
+        p.advance_work(SAVE_WORK_UNIT)
 
         elapsed = time.time() - p.start_time if p.start_time else 0
+        p.set_work(p.work_total, p.work_total)
         p.progress = 100.0
         p.status = "done"
         p.eta_seconds = 0

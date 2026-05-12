@@ -7,7 +7,7 @@ import logging
 from flask import Blueprint, jsonify, request
 
 from app.database import (
-    get_all_users, get_user_by_id, update_user_roles,
+    get_all_users, get_user_by_id, get_users_by_ids, update_user_roles,
     update_user_admin_confirmed, update_user_division_confirmed,
     update_user_divisions_mod_confirmed, delete_user,
     get_audit,
@@ -38,6 +38,7 @@ def admin_audit():
             limit = int(limit_param)
         except (ValueError, TypeError):
             limit = 200
+        limit = max(1, min(limit, 500))
 
         since = request.args.get("since_ts")
         since_ts = None
@@ -51,14 +52,10 @@ def admin_audit():
 
         # Batch-load all referenced actor users in a single query to avoid N+1
         actor_ids = {r.get("actor_id") for r in rows if r.get("actor_id") is not None}
-        actors = {}
-        if actor_ids:
-            for aid in actor_ids:
-                try:
-                    u = get_user_by_id(aid)
-                    actors[aid] = u["username"] if u else None
-                except Exception:
-                    actors[aid] = None
+        actors = {
+            user_id: user["username"]
+            for user_id, user in get_users_by_ids(actor_ids).items()
+        }
 
         for r in rows:
             r["actor_username"] = actors.get(r.get("actor_id")) if r.get("actor_id") else None

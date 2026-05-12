@@ -21,6 +21,8 @@ def _get_conn() -> sqlite3.Connection:
         _local.conn = sqlite3.connect(DB_PATH, timeout=10)
         _local.conn.row_factory = sqlite3.Row
         _local.conn.execute("PRAGMA journal_mode=WAL")  # better concurrency
+        _local.conn.execute("PRAGMA synchronous=NORMAL")
+        _local.conn.execute("PRAGMA foreign_keys=ON")
         _local.conn.execute("PRAGMA busy_timeout=5000")
     return _local.conn
 
@@ -114,6 +116,7 @@ def init_db():
             );
 
             CREATE INDEX IF NOT EXISTS idx_scan_queue_status ON scan_queue(status);
+            CREATE INDEX IF NOT EXISTS idx_scan_queue_active ON scan_queue(status, id);
         """)
 
         # compact audit log for admin actions / important events
@@ -127,6 +130,7 @@ def init_db():
                 details TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts);
+            CREATE INDEX IF NOT EXISTS idx_audit_actor_id ON audit(actor_id);
         """)
 
         # ── migrate user_statuses to global (roblox_id-only primary key) ──
@@ -260,6 +264,25 @@ def get_user_by_id(user_id: int) -> dict | None:
     return _row_to_user(row) if row else None
 
 
+def get_users_by_ids(user_ids) -> dict[int, dict]:
+    """Return users keyed by id, using one query for the provided IDs."""
+    ids = set()
+    for uid in user_ids:
+        if uid is None:
+            continue
+        try:
+            ids.add(int(uid))
+        except (TypeError, ValueError):
+            continue
+    ids = sorted(ids)
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    with get_db() as db:
+        rows = db.execute(f"SELECT * FROM users WHERE id IN ({placeholders})", ids).fetchall()
+    return {row["id"]: _row_to_user(row) for row in rows}
+
+
 def get_all_users() -> list[dict]:
     with get_db() as db:
         rows = db.execute("SELECT * FROM users ORDER BY created_at DESC").fetchall()
@@ -347,8 +370,13 @@ def log_audit(actor_id: int | None, event_type: str, obj: str | None = None, det
 
 def get_audit(limit: int = 200, since_ts: int | None = None) -> list[dict]:
     """Return recent audit rows as dicts (newest first)."""
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 200
+    limit = max(1, min(limit, 500))
     with get_db() as db:
-        if since_ts:
+        if since_ts is not None:
             rows = db.execute("SELECT id, ts, actor_id, event_type, obj, details FROM audit WHERE ts >= ? ORDER BY ts DESC LIMIT ?", (since_ts, limit)).fetchall()
         else:
             rows = db.execute("SELECT id, ts, actor_id, event_type, obj, details FROM audit ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
@@ -391,13 +419,13 @@ def get_queue() -> list[dict]:
 
 def get_queue_position(queue_id: int) -> int | None:
     with get_db() as db:
-        rows = db.execute(
-            "SELECT id FROM scan_queue WHERE status IN ('queued', 'running') ORDER BY id ASC"
-        ).fetchall()
-    for i, r in enumerate(rows):
-        if r["id"] == queue_id:
-            return i + 1
-    return None
+        row = db.execute("SELECT status FROM scan_queue WHERE id = ?", (queue_id,)).fetchone()
+        if not row or row["status"] not in ("queued", "running"):
+            return None
+        return db.execute(
+            "SELECT COUNT(*) FROM scan_queue WHERE status IN ('queued', 'running') AND id <= ?",
+            (queue_id,),
+        ).fetchone()[0]
 
 
 def get_next_queued() -> dict | None:
@@ -449,10 +477,12 @@ def is_queue_running() -> bool:
 
 def _recalc_positions(db):
     rows = db.execute(
-        "SELECT id FROM scan_queue WHERE status IN ('queued', 'running') ORDER BY id ASC"
+        "SELECT id, position FROM scan_queue WHERE status IN ('queued', 'running') ORDER BY id ASC"
     ).fetchall()
     for i, r in enumerate(rows):
-        db.execute("UPDATE scan_queue SET position = ? WHERE id = ?", (i + 1, r["id"]))
+        position = i + 1
+        if r["position"] != position:
+            db.execute("UPDATE scan_queue SET position = ? WHERE id = ?", (position, r["id"]))
 
 
 def _row_to_queue(row) -> dict:
@@ -503,12 +533,18 @@ def get_user_statuses_for_scan(roblox_ids: list[str]) -> dict:
     """Get global statuses for a list of roblox IDs (for displaying in a scan)."""
     if not roblox_ids:
         return {}
+    unique_ids = list(dict.fromkeys(str(uid) for uid in roblox_ids if uid is not None))
+    if not unique_ids:
+        return {}
+    rows = []
     with get_db() as db:
-        placeholders = ",".join("?" for _ in roblox_ids)
-        rows = db.execute(
-            f"SELECT roblox_id, status, discord_ids, set_by, set_at FROM user_statuses WHERE roblox_id IN ({placeholders})",
-            roblox_ids,
-        ).fetchall()
+        for start in range(0, len(unique_ids), 900):
+            chunk = unique_ids[start:start + 900]
+            placeholders = ",".join("?" for _ in chunk)
+            rows.extend(db.execute(
+                f"SELECT roblox_id, status, discord_ids, set_by, set_at FROM user_statuses WHERE roblox_id IN ({placeholders})",
+                chunk,
+            ).fetchall())
     return {
         r["roblox_id"]: {
             "status": r["status"],

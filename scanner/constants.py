@@ -22,6 +22,13 @@ ROBLOX_THUMBNAILS_API = "https://thumbnails.roblox.com"
 CACHE_FILE = os.path.join(PROJECT_ROOT, "scan_cache.json")
 FLAGGED_FILE = os.path.join(PROJECT_ROOT, "flagged.txt")
 
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, default)))
+    except (TypeError, ValueError):
+        return default
+
 # -- SEA Military HR/HC ranks --
 SEA_MILITARY_GROUP_ID = 2648601
 # Bracket prefixes that indicate HR/HC+ ranks (rank 10+)
@@ -32,16 +39,10 @@ SEA_HRHC_PREFIXES = {
 }
 
 # -- rate limits --
-ROTECTOR_RATE_LIMIT = 500
-ROTECTOR_RATE_WINDOW = 10
-ROBLOX_RATE_LIMIT = 80
-ROBLOX_RATE_WINDOW = 10
-
-def _env_int(name: str, default: int) -> int:
-    try:
-        return max(1, int(os.getenv(name, default)))
-    except (TypeError, ValueError):
-        return default
+ROTECTOR_RATE_LIMIT = _env_int("ROTECTOR_RATE_LIMIT", 500)
+ROTECTOR_RATE_WINDOW = _env_int("ROTECTOR_RATE_WINDOW", 10)
+ROBLOX_RATE_LIMIT = _env_int("ROBLOX_RATE_LIMIT", 80)
+ROBLOX_RATE_WINDOW = _env_int("ROBLOX_RATE_WINDOW", 10)
 
 
 # -- threading --
@@ -56,6 +57,10 @@ MAX_RETRIES = 5
 # -- feature toggles / safety caps --
 CHECK_GROUP_MEMBERSHIP = os.getenv("CHECK_GROUP_MEMBERSHIP", "1").lower() in ("1", "true", "yes")
 ROBLOX_REMOVE_MAX = _env_int("ROBLOX_REMOVE_MAX", 200)
+DISCORD_LOOKUP_CACHE_TTL_SECONDS = min(
+    _env_int("DISCORD_LOOKUP_CACHE_TTL_SECONDS", 23 * 60 * 60),
+    24 * 60 * 60,
+)
 
 # -- HTTP timeouts & retry behaviour --
 HTTP_TIMEOUT_ROTECTOR = 30      # seconds

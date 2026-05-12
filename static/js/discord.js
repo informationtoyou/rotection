@@ -16,7 +16,7 @@ function renderDiscordPanel() {
 
 function renderDiscordFilters() {
   var filterHtml = `
-    <div class="discord-filters" style="margin-bottom: 16px; padding: 16px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;">
+    <div class="discord-filters" id="discordFiltersPanel" style="margin-bottom: 16px; padding: 16px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;">
       <h4 style="margin-bottom: 12px; font-size: 13px; font-weight: 600; text-transform: uppercase; color: var(--text2);">Filter Options</h4>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -42,7 +42,9 @@ function renderDiscordFilters() {
   
   var filterContainer = document.querySelector('.export-options');
   if (filterContainer) {
-    filterContainer.insertAdjacentHTML('afterend', filterHtml);
+    var existing = document.getElementById('discordFiltersPanel');
+    if (existing) existing.outerHTML = filterHtml;
+    else filterContainer.insertAdjacentHTML('afterend', filterHtml);
   }
 }
 
@@ -68,7 +70,12 @@ function applyDiscordFilters() {
     '&exclude_false_positives=' + (discordFilters.excludeFalsePositives ? 'true' : 'false');
   
   fetch(url)
-    .then(r => r.json())
+    .then(function(r) {
+      return r.json().then(function(data) {
+        if (!r.ok) throw new Error(data.error || 'Failed to apply filters');
+        return data;
+      });
+    })
     .then(data => {
       currentScanData.discord_ids = data.discord_ids;
       document.getElementById('discordIdCount').textContent = data.discord_ids.length;

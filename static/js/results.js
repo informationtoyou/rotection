@@ -37,6 +37,17 @@ function renderResults() {
   if (!currentScanData) return;
   var d = currentScanData;
   allUsers = Object.values(d.users || {});
+  allUsers.forEach(function(u) {
+    u._searchText = [
+      u.name || '',
+      u.displayName || '',
+      String(u.id || '')
+    ].join(' ').toLowerCase();
+    u._sortName = (u.name || '').toLowerCase();
+    u._sortGroup = (u.group_name || '').toLowerCase();
+    u._confidencePct = Math.round((u.confidence || 0) * 100);
+    u._discordCount = (u.discord_accounts || []).length;
+  });
   currentPage = 1;
 
   var groupSet = new Map();
@@ -146,8 +157,9 @@ function applyFilters() {
   var activeChip = document.querySelector('.group-chip.active');
   var activeGroup = activeChip ? (activeChip.dataset.group || '') : '';
   var flag = document.getElementById('filterFlag') ? document.getElementById('filterFlag').value : '';
+  var flagValue = flag !== '' ? parseInt(flag, 10) : null;
   var statusFilter = document.getElementById('filterStatus') ? document.getElementById('filterStatus').value : '';
-  var confMin = parseInt(document.getElementById('filterConfMin') ? document.getElementById('filterConfMin').value : '0');
+  var confMin = parseInt(document.getElementById('filterConfMin') ? document.getElementById('filterConfMin').value : '0', 10) || 0;
   var actionable = document.getElementById('filterActionable') ? document.getElementById('filterActionable').checked : false;
   var hasDiscord = document.getElementById('filterHasDiscord') ? document.getElementById('filterHasDiscord').checked : false;
   var hrhcOnly = document.getElementById('filterHRHC') ? document.getElementById('filterHRHC').checked : false;
@@ -157,13 +169,12 @@ function applyFilters() {
   if (inGroupOnly && leftGroupOnly) { inGroupOnly = false; leftGroupOnly = false; }
 
   filteredUsers = allUsers.filter(function(u) {
-    if (search && !(u.name||'').toLowerCase().includes(search) && !String(u.id).includes(search) && !(u.displayName||'').toLowerCase().includes(search)) return false;
+    if (search && !u._searchText.includes(search)) return false;
     if (activeGroup && u.group_name !== activeGroup) return false;
-    if (flag !== '' && u.flagType !== parseInt(flag)) return false;
-    var conf = u.confidence ? Math.round(u.confidence * 100) : 0;
-    if (conf < confMin) return false;
+    if (flagValue !== null && u.flagType !== flagValue) return false;
+    if (u._confidencePct < confMin) return false;
     if (actionable && !u.actionable) return false;
-    if (hasDiscord && (!u.discord_accounts || u.discord_accounts.length === 0)) return false;
+    if (hasDiscord && !u._discordCount) return false;
     if (hrhcOnly && !u.is_sea_hrhc) return false;
     if (excludeHrhc && u.is_sea_hrhc) return false;
     if (inGroupOnly && u.in_group !== true) return false;
@@ -177,8 +188,8 @@ function applyFilters() {
   });
 
   filteredUsers.sort(function(a, b) {
-    var va = a[sortCol] != null ? a[sortCol] : '';
-    var vb = b[sortCol] != null ? b[sortCol] : '';
+    var va = sortCol === 'name' ? a._sortName : (sortCol === 'group_name' ? a._sortGroup : (a[sortCol] != null ? a[sortCol] : ''));
+    var vb = sortCol === 'name' ? b._sortName : (sortCol === 'group_name' ? b._sortGroup : (b[sortCol] != null ? b[sortCol] : ''));
     if (typeof va === 'string') va = va.toLowerCase();
     if (typeof vb === 'string') vb = vb.toLowerCase();
     return va < vb ? -1 * sortDir : va > vb ? 1 * sortDir : 0;
@@ -215,21 +226,23 @@ function renderPage() {
   var body = document.getElementById('resultsBody');
   var html = '';
   var showStatusSelect = canSetStatus();
+  var divisionGroupId = currentUser ? currentUser.division_group_id : null;
+  var canRemoveFromDivision = canManageDivision() && hasRobloxConnection();
 
   page.forEach(function(u) {
     var ft = FLAG_MAP[u.flagType] || {name:'Unknown',color:'#6b7280'};
-    var conf = u.confidence ? Math.round(u.confidence * 100) : 0;
+    var conf = u._confidencePct;
     var confColor = conf >= 80 ? 'var(--red)' : conf >= 50 ? 'var(--orange)' : 'var(--yellow)';
     var thumb = safeThumbnail(u.thumbnailUrl);
     var discords = (u.discord_accounts || []).slice(0,3).map(function(d) { return '<span class="discord-id">' + safeDiscordId(d.id) + '</span>'; }).join(' ');
-    var moreDiscords = (u.discord_accounts || []).length > 3 ? '<span class="text-muted text-xs">+' + (u.discord_accounts.length-3) + '</span>' : '';
+    var moreDiscords = u._discordCount > 3 ? '<span class="text-muted text-xs">+' + (u._discordCount-3) + '</span>' : '';
     var reasonCount = (u.reasons || []).length;
     var stObj = currentScanStatuses[String(u.id)];
     var uStatus = stObj ? stObj.status : 'Pending Review';
     var stCss = STATUS_CSS[uStatus] || 'ust-pending-review';
     var inGroup = (u.in_group === true) ? 'Yes' : (u.in_group === false ? 'No' : '—');
     var inGroupRole = u.group_role ? (' <span class="text-muted text-xs">(' + esc(u.group_role) + ')</span>') : '';
-    var canRemove = canManageDivision() && hasRobloxConnection() && currentUser && currentUser.division_group_id === u.group_id;
+    var canRemove = canRemoveFromDivision && divisionGroupId === u.group_id;
 
     html += '<tr>';
     html += '<td>' + (thumb ? '<img class="avatar" src="' + thumb + '" loading="lazy" onerror="this.style.display=\'none\'">' : '') + '<strong>' + esc(u.name) + '</strong>' + (u.is_sea_hrhc ? ' <span class="hrhc-tag">HR/HC</span>' : '') + '<br><span class="text-muted text-xs">' + esc(u.displayName||'') + ' · ' + u.id + '</span></td>';
@@ -245,7 +258,7 @@ function renderPage() {
       ALL_STATUSES.forEach(function(s) { html += '<option value="' + s + '"' + (uStatus === s ? ' selected' : '') + '>' + s + '</option>'; });
       html += '</select></td>';
     } else {
-    html += '<td><span class="user-status-badge ' + stCss + '">' + esc(uStatus) + '</span></td>';
+      html += '<td><span class="user-status-badge ' + stCss + '">' + esc(uStatus) + '</span></td>';
     }
 
     html += '<td>' + inGroup + inGroupRole + '</td>';

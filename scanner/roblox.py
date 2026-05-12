@@ -175,7 +175,8 @@ def check_user_in_group(user_id: int, group_id: int) -> dict:
     return {"in_group": False, "role": None, "role_id": None, "rank": None}
 
 
-def batch_check_group_membership(user_records: dict, log=print, max_workers: int = 10, progress=None) -> dict:
+def batch_check_group_membership(user_records: dict, log=print, max_workers: int = 10,
+                                 progress=None, progress_callback=None) -> dict:
     """
     Check group membership for each user record (uses record's group_id).
     Returns dict keyed by uid_str -> membership info.
@@ -200,16 +201,20 @@ def batch_check_group_membership(user_records: dict, log=print, max_workers: int
     with ThreadPoolExecutor(max_workers=min(max_workers, len(users))) as executor:
         futures = {executor.submit(_check, u): u for u in users}
         for f in as_completed(futures):
+            user = futures[f]
             try:
                 uid_str, info = f.result()
-                with results_lock:
-                    results[uid_str] = info
-                    checked += 1
-                    if progress:
-                        progress.users_checked = checked
-                if checked % 50 == 0:
-                    log(f"  Membership checked: {checked}/{total}")
             except Exception:
-                pass
+                uid_str = str(user.get("id", ""))
+                info = {"in_group": None, "role": None, "role_id": None, "rank": None}
+            with results_lock:
+                results[uid_str] = info
+                checked += 1
+                if progress:
+                    progress.users_checked = checked
+            if progress_callback:
+                progress_callback(1)
+            if checked % 50 == 0:
+                log(f"  Membership checked: {checked}/{total}")
 
     return results
